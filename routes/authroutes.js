@@ -6,6 +6,8 @@ const router = express.Router();
 
 const JWT_SECRET = process.env.JWT_SECRET || "secretkey"; // Usa una chiave segreta sicura
 
+router.get('/test' , async (req, res) => {return res.status(200).json({ message: "server healthy" });})
+
 // Registrazione dell'utente
 router.post("/register", async (req, res) => {
   const { username, email, password } = req.body;
