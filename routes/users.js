@@ -43,18 +43,28 @@ router.post("/:userId/movies", async (req, res) => {
   const { userId } = req.params;
   const { movie, watched } = req.body;
 
+
+
   try {
     // Cerca o crea il film nella collezione Movies
     let title = movie.title;
-    let foundMovie = await Movie.findOne({ title });
+    let foundMovie = await Movie.findOne({ Title: title });
     if (!foundMovie) {
-      foundMovie = new Movie(movie);
+      foundMovie = new Movie({
+        title: movie.title,
+        id: movie.id,
+        overview: movie.overview,
+        poster_path: "https://image.tmdb.org/t/p/original" + movie.poster_path,
+        release_date: movie.release_date,
+        genre_ids: movie.genre_ids,
+        vote_average: movie.vote_average,
+      });
       await foundMovie.save();
     }
 
     // Aggiungi il riferimento al film nell'array movies dell'utente
     const user = await User.findById(userId);
-    user.movies.push({ movieId: movie._id, watched });
+    user.movies.push({ movieId: foundMovie._id, watched });
     await user.save();
 
     res.status(201).json(user);
@@ -68,8 +78,7 @@ router.get("/:userId/movies", async (req, res) => {
   const { userId } = req.params;
 
   try {
-    const user = await User.findById(userId).populate("movies");
-    console.log(user)
+    const user = await User.findById(userId).populate("movies.movieId");
     res.json(user.movies);
   } catch (err) {
     res.status(500).json({ error: err.message });
