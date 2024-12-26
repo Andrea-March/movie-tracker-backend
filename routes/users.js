@@ -3,7 +3,7 @@ const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const User = require("../models/User");
 const Movie = require("../models/Movie");
-const {cacheData, getData, deleteData } = require("../utils/redisClient");
+const {cacheData, getData, deleteData } = require("../utils/redisclient");
 
 const router = express.Router();
 
