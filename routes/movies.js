@@ -48,7 +48,6 @@ router.get("/search", async (req, res) => {
       },
       params: {
         query: query, // 's' è il parametro di ricerca per il titolo
-        apikey: OMDB_API_KEY,
       },
     });
 
@@ -58,6 +57,28 @@ router.get("/search", async (req, res) => {
     res.json(response.data.results); // Restituisce la lista di film trovati
   } catch (err) {
     console.error("Errore durante la ricerca OMDb:", err);
+    res.status(500).json({ error: "Errore durante la ricerca dei film" });
+  }
+});
+
+router.get('/popular', async (req, res) => {
+  try {
+    // Chiamata a TMDb API per cercare i film
+    const response = await axios.get("https://api.themoviedb.org/3/movie/popular?language=it-IT&page=1", {
+      headers:{
+        Authorization: `Bearer ${process.env.TMDB_ACCESS_TOKEN}`
+      },
+   /*    params: {
+        query: query, // 's' è il parametro di ricerca per il titolo
+      }, */
+    });
+
+    if (response.data.Response === "False") {
+      return res.status(404).json({ error: response.data.Error }); // Error handling
+    }
+    res.json(response.data.results); // Restituisce la lista di film trovati
+  } catch (err) {
+    console.error("Errore durante la ricerca TMDb:", err);
     res.status(500).json({ error: "Errore durante la ricerca dei film" });
   }
 });

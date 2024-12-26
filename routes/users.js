@@ -92,7 +92,7 @@ router.put("/:userId/movies/:movieId", async (req, res) => {
 
   try {
     const user = await User.findById(userId);
-    const movie = user.movies.find((m) => m.movieId.toString() === movieId);
+    const movie = user.movies.find((m) => m.id.toString() === movieId);
     if (!movie) return res.status(404).json({ error: "Movie not found for this user" });
 
     movie.watched = watched;
