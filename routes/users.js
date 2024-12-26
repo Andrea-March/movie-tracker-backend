@@ -3,6 +3,7 @@ const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const User = require("../models/User");
 const Movie = require("../models/Movie");
+const {cacheData, getData, deleteData } = require("../utils/redisClient");
 
 const router = express.Router();
 
@@ -43,7 +44,18 @@ router.post("/:userId/movies", async (req, res) => {
   const { userId } = req.params;
   const { movie, watched } = req.body;
 
-
+  try {
+    // Invalida la cache
+    if(watched){
+      await deleteData(`watched_movies_${userId}`);
+    }else{
+      await deleteData(`to_watch_movies_${userId}`);
+    }
+    
+    console.log("cache invalidata con successo");
+  } catch (err) {
+    console.error(err);
+  }
 
   try {
     // Cerca o crea il film nella collezione Movies
@@ -74,21 +86,73 @@ router.post("/:userId/movies", async (req, res) => {
 });
 
 // Ottieni i film di un utente
-router.get("/:userId/movies", async (req, res) => {
+router.get("/:userId/movies/watched", async (req, res) => {
   const { userId } = req.params;
 
   try {
+    // Controlla se i dati sono già nella cache
+    const cachedData = await getData(`watched_movies_${userId}`);
+    if (cachedData) {
+      return res.json(JSON.parse(cachedData));
+    }
+  } catch (err) {
+    console.error(err);
+  }
+
+  try {
     const user = await User.findById(userId).populate("movies.movieId");
-    res.json(user.movies);
+    const watchedMovies = user.movies.filter(movie => movie.watched);
+    
+    // Salva nella cache con un TTL (es. 3600 secondi = 1 ora)
+    await cacheData(`watched_movies_${userId}`, JSON.stringify(watchedMovies));
+
+    res.json(watchedMovies);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
+// Ottieni i film di un utente
+router.get("/:userId/movies/to-watch", async (req, res) => {
+  const { userId } = req.params;
+
+  try {
+    // Controlla se i dati sono già nella cache
+    const cachedData = await getData(`to_watch_movies_${userId}`);
+    if (cachedData) {
+      return res.json(JSON.parse(cachedData));
+    }
+  } catch (err) {
+    console.error(err);
+  }
+
+  try {
+    const user = await User.findById(userId).populate("movies.movieId");
+    const toWatchMovies = user.movies.filter(movie => !movie.watched);
+    
+    // Salva nella cache con un TTL (es. 3600 secondi = 1 ora)
+    await cacheData(`to_watch_movies_${userId}`,  JSON.stringify(toWatchMovies));
+
+    res.json(toWatchMovies);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+
 // Aggiorna lo stato di un film
 router.put("/:userId/movies/:movieId", async (req, res) => {
   const { userId, movieId } = req.params;
   const { watched } = req.body;
+
+  try {
+    // Invalida la cache
+    await deleteData(`watched_movies_${userId}`);
+    await deleteData(`to_watch_movies_${userId}`);
+    console.log("cache invalidata con successo");
+  } catch (err) {
+    console.error(err);
+  }
 
   try {
     const user = await User.findById(userId);
@@ -107,6 +171,15 @@ router.put("/:userId/movies/:movieId", async (req, res) => {
 // Elimina un film dall'utente
 router.delete("/:userId/movies/:movieId", async (req, res) => {
   const { userId, movieId } = req.params;
+
+  try {
+    // Invalida la cache
+    await deleteData(`watched_movies_${userId}`);
+    await deleteData(`to_watch_movies_${userId}`);
+    console.log("cache invalidata con successo");
+  } catch (err) {
+    console.error(err);
+  }
 
   try {
     const user = await User.findById(userId);
