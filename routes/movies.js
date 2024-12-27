@@ -104,4 +104,46 @@ router.get('/popular', async (req, res) => {
   }
 });
 
+router.get('/top_rated', async (req, res) => {
+  const page = parseInt(req.query.page) || 1;
+
+  try{
+    const cachedData = await getData(`top_rated_page_${page}`)
+    if (cachedData) {
+      // Se i dati sono in cache, rispondi con i dati memorizzati
+      console.log(`Restituendo i dati dalla cache per la pagina ${page}`);
+      return res.json(JSON.parse(cachedData));
+    }
+  }catch(err) {
+    console.log(err)
+  }
+
+  try {
+    // Chiamata a TMDb API per cercare i film
+    const response = await axios.get("https://api.themoviedb.org/3/movie/top_rated", {
+      headers: {
+        Authorization: `Bearer ${process.env.TMDB_ACCESS_TOKEN}`
+      },
+      params: {
+        language: "it-IT",
+        page, // Passa il numero di pagina alla query
+      },
+    });
+
+    if (response.data.Response === "False") {
+      return res.status(404).json({ error: response.data.Error }); // Error handling
+    }
+    const responseObject = {
+      movies: response.data.results, // Restituisce i film
+      totalPages: response.data.total_pages, // Restituisce il numero totale di pagine
+      currentPage: page, // Restituisce la pagina corrente
+    }
+    cacheData(`top_rated_page_${page}`, JSON.stringify(responseObject))
+    res.json(responseObject);
+  } catch (err) {
+    console.error("Errore durante la ricerca TMDb:", err);
+    res.status(500).json({ error: "Errore durante la ricerca dei film" });
+  }
+});
+
 module.exports = router;
