@@ -60,7 +60,7 @@ router.post("/:userId/movies", async (req, res) => {
   try {
     // Cerca o crea il film nella collezione Movies
     let title = movie.title;
-    let foundMovie = await Movie.findOne({ Title: title });
+    let foundMovie = await Movie.findOne({ id: movie.id });
     if (!foundMovie) {
       foundMovie = new Movie({
         title: movie.title,
@@ -103,7 +103,7 @@ router.get("/:userId/movies/watched", async (req, res) => {
     const user = await User.findById(userId).populate("movies.movieId");
     const watchedMovies = user.movies
                             .filter(movie => movie.watched)
-                            .reverse();
+                            .sort((a, b) => b.addedAt - a.addedAt);
     
     // Salva nella cache con un TTL (es. 3600 secondi = 1 ora)
     await cacheData(`watched_movies_${userId}`, JSON.stringify(watchedMovies));
@@ -134,7 +134,7 @@ router.get("/:userId/movies/to-watch", async (req, res) => {
                     .populate("movies.movieId");
     const toWatchMovies = user.movies
                             .filter(movie => !movie.watched)
-                            .reverse();
+                            .sort((a, b) => b.addedAt - a.addedAt);
     
     // Salva nella cache con un TTL (es. 3600 secondi = 1 ora)
     await cacheData(`to_watch_movies_${userId}`,  JSON.stringify(toWatchMovies));
@@ -162,10 +162,13 @@ router.put("/:userId/movies/:movieId", async (req, res) => {
 
   try {
     const user = await User.findById(userId);
-    const movie = user.movies.find((m) => m.id.toString() === movieId);
+    const movie = user.movies.find((m) => m.movieId.toString() === movieId);
     if (!movie) return res.status(404).json({ error: "Movie not found for this user" });
 
     movie.watched = watched;
+
+    movie.addedAt = new Date(); 
+
     await user.save();
 
     res.json(user);

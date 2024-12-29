@@ -8,6 +8,7 @@ const userSchema = new mongoose.Schema({
     {
       movieId: { type: mongoose.Schema.Types.ObjectId, ref: "Movie" }, // Riferimento al modello Movie
       watched: { type: Boolean, default: false },
+      addedAt: { type: Date, default: Date.now },
     },
   ],
 });
