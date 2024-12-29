@@ -59,8 +59,8 @@ router.post("/:userId/movies", async (req, res) => {
 
   try {
     // Cerca o crea il film nella collezione Movies
-    let title = movie.title;
     let foundMovie = await Movie.findOne({ id: movie.id });
+    
     if (!foundMovie) {
       foundMovie = new Movie({
         title: movie.title,
