@@ -48,6 +48,7 @@ router.get("/search", async (req, res) => {
         Authorization: `Bearer ${process.env.TMDB_ACCESS_TOKEN}`
       },
       params: {
+        language: "it-IT",
         query: query, // 's' è il parametro di ricerca per il titolo
       },
     });
