@@ -101,7 +101,9 @@ router.get("/:userId/movies/watched", async (req, res) => {
 
   try {
     const user = await User.findById(userId).populate("movies.movieId");
-    const watchedMovies = user.movies.filter(movie => movie.watched);
+    const watchedMovies = user.movies
+                            .filter(movie => movie.watched)
+                            .reverse();
     
     // Salva nella cache con un TTL (es. 3600 secondi = 1 ora)
     await cacheData(`watched_movies_${userId}`, JSON.stringify(watchedMovies));
@@ -127,8 +129,12 @@ router.get("/:userId/movies/to-watch", async (req, res) => {
   }
 
   try {
-    const user = await User.findById(userId).populate("movies.movieId");
-    const toWatchMovies = user.movies.filter(movie => !movie.watched);
+    const user = await User
+                    .findById(userId)
+                    .populate("movies.movieId");
+    const toWatchMovies = user.movies
+                            .filter(movie => !movie.watched)
+                            .reverse();
     
     // Salva nella cache con un TTL (es. 3600 secondi = 1 ora)
     await cacheData(`to_watch_movies_${userId}`,  JSON.stringify(toWatchMovies));
