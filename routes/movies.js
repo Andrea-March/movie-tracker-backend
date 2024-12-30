@@ -4,8 +4,8 @@ const router = express.Router();
 const {cacheData, getData} = require ("../utils/redisclient")
 
 // La tua API Key OMDb
-const OMDB_API_KEY = process.env.OMDB_API_KEY; // Inserisci la tua API key OMDb
-
+const TMDB_ACCESS_TOKEN = process.env.TMDB_ACCESS_TOKEN; // Inserisci la tua API key OMDb
+const TMDB_MOVIE_API= "https://api.themoviedb.org/3/movie/"
 // Cerca un film tramite OMDb API
 /* router.get("/search", async (req, res) => {
   const { query } = req.query;
@@ -45,7 +45,7 @@ router.get("/search", async (req, res) => {
     // Chiamata a OMDb API per cercare i film
     const response = await axios.get("https://api.themoviedb.org/3/search/movie", {
       headers:{
-        Authorization: `Bearer ${process.env.TMDB_ACCESS_TOKEN}`
+        Authorization: `Bearer ${TMDB_ACCESS_TOKEN}`
       },
       params: {
         language: "it-IT",
@@ -79,9 +79,9 @@ router.get('/popular', async (req, res) => {
 
   try {
     // Chiamata a TMDb API per cercare i film
-    const response = await axios.get("https://api.themoviedb.org/3/movie/popular", {
+    const response = await axios.get(`${TMDB_MOVIE_API}popular`, {
       headers: {
-        Authorization: `Bearer ${process.env.TMDB_ACCESS_TOKEN}`
+        Authorization: `Bearer ${TMDB_ACCESS_TOKEN}`
       },
       params: {
         language: "it-IT",
@@ -121,9 +121,9 @@ router.get('/top_rated', async (req, res) => {
 
   try {
     // Chiamata a TMDb API per cercare i film
-    const response = await axios.get("https://api.themoviedb.org/3/movie/top_rated", {
+    const response = await axios.get(`${TMDB_MOVIE_API}top_rated`, {
       headers: {
-        Authorization: `Bearer ${process.env.TMDB_ACCESS_TOKEN}`
+        Authorization: `Bearer ${TMDB_ACCESS_TOKEN}`
       },
       params: {
         language: "it-IT",
@@ -146,5 +146,43 @@ router.get('/top_rated', async (req, res) => {
     res.status(500).json({ error: "Errore durante la ricerca dei film" });
   }
 });
+
+router.get('/providers/:movieId', async (req, res) => {
+  const {movieId} = req.params;
+
+  try{
+    const cachedData = await getData(`providers_${movieId}`)
+    if (cachedData) {
+      // Se i dati sono in cache, rispondi con i dati memorizzati
+      console.log(`Restituendo i dati dalla cache per la pagina ${page}`);
+      return res.json(JSON.parse(cachedData));
+    }
+  }catch(err) {
+    console.log(err)
+  }
+
+  try {
+    // Chiamata a TMDb API per cercare i film
+    const response = await axios.get(`${TMDB_MOVIE_API}${movieId}/watch/providers `, {
+      headers: {
+        Authorization: `Bearer ${TMDB_ACCESS_TOKEN}`
+      },
+      params: {
+        movie_id: movieId,
+      },
+    });
+
+    if (response.data.Response === "False") {
+      return res.status(404).json({ error: response.data.Error }); // Error handling
+    }
+    const providers = response.data.results.IT
+    cacheData(`providers_${movieId}`, JSON.stringify(providers))
+    res.json(providers);
+  } catch (err) {
+    console.error("Errore durante la ricerca TMDb:", err);
+    res.status(500).json({ error: "Errore durante la ricerca dei film" });
+  }
+});
+
 
 module.exports = router;
