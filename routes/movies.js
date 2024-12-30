@@ -53,7 +53,7 @@ router.get("/search", async (req, res) => {
       },
     });
 
-    if (response.data.Response === "False") {
+    if (response.status !== 200) {
       return res.status(404).json({ error: response.data.Error }); // Error handling
     }
     res.json(response.data.results); // Restituisce la lista di film trovati
@@ -89,7 +89,7 @@ router.get('/popular', async (req, res) => {
       },
     });
 
-    if (response.data.Response === "False") {
+    if (response.status !== 200) {
       return res.status(404).json({ error: response.data.Error }); // Error handling
     }
     const responseObject = {
@@ -131,7 +131,7 @@ router.get('/top_rated', async (req, res) => {
       },
     });
 
-    if (response.data.Response === "False") {
+    if (response.status !== 200) {
       return res.status(404).json({ error: response.data.Error }); // Error handling
     }
     const responseObject = {
@@ -140,6 +140,48 @@ router.get('/top_rated', async (req, res) => {
       currentPage: page, // Restituisce la pagina corrente
     }
     cacheData(`top_rated_page_${page}`, JSON.stringify(responseObject))
+    res.json(responseObject);
+  } catch (err) {
+    console.error("Errore durante la ricerca TMDb:", err);
+    res.status(500).json({ error: "Errore durante la ricerca dei film" });
+  }
+});
+
+router.get('/upcoming', async (req, res) => {
+  const page = parseInt(req.query.page) || 1;
+
+  try{
+    const cachedData = await getData(`upcoming_page_${page}`)
+    if (cachedData) {
+      // Se i dati sono in cache, rispondi con i dati memorizzati
+      console.log(`Restituendo i dati dalla cache per la pagina ${page}`);
+      return res.json(JSON.parse(cachedData));
+    }
+  }catch(err) {
+    console.log(err)
+  }
+
+  try {
+    // Chiamata a TMDb API per cercare i film
+    const response = await axios.get(`${TMDB_MOVIE_API}upcoming`, {
+      headers: {
+        Authorization: `Bearer ${TMDB_ACCESS_TOKEN}`
+      },
+      params: {
+        language: "it-IT",
+        page, // Passa il numero di pagina alla query
+      },
+    });
+
+    if (response.status !== 200) {
+      return res.status(404).json({ error: response.data.Error }); // Error handling
+    }
+    const responseObject = {
+      movies: response.data.results, // Restituisce i film
+      totalPages: response.data.total_pages, // Restituisce il numero totale di pagine
+      currentPage: page, // Restituisce la pagina corrente
+    }
+    cacheData(`upcoming_page_${page}`, JSON.stringify(responseObject))
     res.json(responseObject);
   } catch (err) {
     console.error("Errore durante la ricerca TMDb:", err);
@@ -172,7 +214,7 @@ router.get('/providers/:movieId', async (req, res) => {
       },
     });
 
-    if (response.data.Response === "False") {
+    if (response.status !== 200) {
       return res.status(404).json({ error: response.data.Error }); // Error handling
     }
     const providers = response.data.results.IT
