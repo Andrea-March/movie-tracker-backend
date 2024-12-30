@@ -26,6 +26,16 @@ const redis = new Redis({
     }
   }
 
+  async function quickCacheData(key, value) {
+    try {
+      await redis.set(key, JSON.stringify(value), "EX", 60); // Scadenza
+      console.log(`Dato memorizzato nella cache con chiave: ${key}`);
+    } catch (err) {
+      console.error("Errore durante il caching:", err);
+      throw new Error(err);
+    }
+  }
+
   async function getData(key) {
     try {
       const data = await redis.get(key);
@@ -51,4 +61,4 @@ const redis = new Redis({
   }
   
 
-module.exports = {redis, cacheData, getData, deleteData};
+module.exports = {redis, cacheData, quickCacheData, getData, deleteData};

@@ -1,7 +1,8 @@
 const axios = require("axios");
 const express = require("express");
 const router = express.Router();
-const {cacheData, getData} = require ("../utils/redisclient")
+const {cacheData, getData, quickCacheData} = require ("../utils/redisclient");
+const { Error } = require("mongoose");
 
 // La tua API Key OMDb
 const TMDB_ACCESS_TOKEN = process.env.TMDB_ACCESS_TOKEN; // Inserisci la tua API key OMDb
@@ -40,7 +41,12 @@ router.get("/search", async (req, res) => {
   if (!query) {
     return res.status(400).json({ error: "Il parametro query è obbligatorio" });
   }
-
+  try{
+    const cachedData = getData(`search_${query}`);
+    if(cacheData) return response.status(200).json(JSON.parse(cacheData));
+  }catch(err) {
+    console.log("unable to access cache:" + err.message)
+  }
   try {
     // Chiamata a OMDb API per cercare i film
     const response = await axios.get("https://api.themoviedb.org/3/search/movie", {
@@ -56,7 +62,9 @@ router.get("/search", async (req, res) => {
     if (response.status !== 200) {
       return res.status(404).json({ error: response.data.Error }); // Error handling
     }
-    res.json(response.data.results); // Restituisce la lista di film trovati
+    const limitedResults = response.data.results.slice(0, 3);
+    quickCacheData(`search_${query}`, JSON.stringify(limitedResults));
+    res.json(limitedResults); // Restituisce la lista di film trovati
   } catch (err) {
     console.error("Errore durante la ricerca OMDb:", err);
     res.status(500).json({ error: "Errore durante la ricerca dei film" });
