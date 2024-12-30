@@ -4,6 +4,8 @@ const jwt = require("jsonwebtoken");
 const User = require("../models/User");
 const Movie = require("../models/Movie");
 const {cacheData, getData, deleteData } = require("../utils/redisclient");
+const { getMovieTrailer } = require("./movies.js");
+
 
 const router = express.Router();
 
@@ -63,12 +65,19 @@ router.post("/:userId/movies", async (req, res) => {
     let foundMovie = await Movie.findOne({ id: movie.id });
 
     if (!foundMovie) {
+      let trailerUrl = undefined;
+      try{
+        trailerUrl = await getMovieTrailer(movie.id);
+      }catch(err){
+        console.log("unable to find trailer you tube key for movie"+movie.title)
+      }
       foundMovie = new Movie({
         title: movie.title,
         id: movie.id,
         overview: movie.overview,
         poster_path: "https://image.tmdb.org/t/p/original" + movie.poster_path,
         release_date: movie.release_date,
+        trailer_url: trailerUrl,
         genre_ids: movie.genre_ids,
         vote_average: movie.vote_average,
       });

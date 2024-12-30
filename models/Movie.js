@@ -6,6 +6,7 @@ const movieSchema = new mongoose.Schema({
   overview: {type: String},
   poster_path: {type: String, required: false},
   release_date: { type: Date },
+  trailer_url: {type: String},
   genre_ids: [Number],
   vote_average: {type: Number}
 });

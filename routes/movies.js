@@ -226,5 +226,63 @@ router.get('/providers/:movieId', async (req, res) => {
   }
 });
 
+router.get("/:movieId/trailer", async (req, res) => {
+  const {movieId} = req.params;
+  try{
+    const cachedData = await getData(`trailer_${movieId}`)
+    if (cachedData) {
+      // Se i dati sono in cache, rispondi con i dati memorizzati
+      console.log(`Restituendo i dati dalla cache per la pagina ${page}`);
+      return res.json(JSON.parse(cachedData));
+    }
+  }catch(err) {
+    console.log(err)
+  }
+
+  try {
+    // Chiamata a OMDb API per cercare i film
+    const trailer_url = await getMovieTrailer(movieId)
+    if (!trailer_url) {
+      return res.status(404).json({ error: "trailer url not found" }); // Error handling
+    }
+    cacheData(`trailer_${movieId}`, JSON.stringify({trailer_url:`${trailer_url}`}))
+    res.status(200).json({trailer_url:`${trailer_url}`}); // Restituisce la lista di film trovati
+  } catch (err) {
+    console.error("Errore durante la ricerca OMDb:", err);
+    res.status(500).json({ error: "Errore durante la ricerca dei film" });
+  }
+});
+
+ 
+
+
+async function getMovieTrailer(movieId){
+  try {
+    // Chiamata a TMDb API per cercare i film
+    const response = await axios.get(`${TMDB_MOVIE_API}${movieId}/videos`, {
+      headers: {
+        Authorization: `Bearer ${TMDB_ACCESS_TOKEN}`
+      },
+      params: {
+        movie_id: movieId,
+        language: "it-IT",
+      },
+    });
+
+    if (response.status !== 200) {
+      return null; // Error handling
+    }
+    const videos = response.data.results;
+    const youTubeVideo = videos.find((el) => el["site"] === "YouTube");
+    let youtubeUrl;
+    if(youTubeVideo){
+      youtubeUrl = `https://www.youtube.com/embed/${youTubeVideo.key}`;
+    }
+    return youtubeUrl;
+  } catch (err) {
+    console.error("Errore durante la ricerca TMDb:", err);
+    return null;
+  }
+}
 
 module.exports = router;
