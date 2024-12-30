@@ -232,7 +232,6 @@ router.get("/:movieId/trailer", async (req, res) => {
     const cachedData = await getData(`trailer_${movieId}`)
     if (cachedData) {
       // Se i dati sono in cache, rispondi con i dati memorizzati
-      console.log(`Restituendo i dati dalla cache per la pagina ${page}`);
       return res.json(JSON.parse(cachedData));
     }
   }catch(err) {
