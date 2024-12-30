@@ -58,9 +58,10 @@ router.post("/:userId/movies", async (req, res) => {
   }
 
   try {
+    const user = await User.findById(userId);
     // Cerca o crea il film nella collezione Movies
     let foundMovie = await Movie.findOne({ id: movie.id });
-    
+
     if (!foundMovie) {
       foundMovie = new Movie({
         title: movie.title,
@@ -72,10 +73,12 @@ router.post("/:userId/movies", async (req, res) => {
         vote_average: movie.vote_average,
       });
       await foundMovie.save();
+    }else if (user.movies.some((movie) => movie.movieId.toString() === movie.id)){
+      return res.status(400).json({ error: "Film già salvato!" });
     }
 
     // Aggiungi il riferimento al film nell'array movies dell'utente
-    const user = await User.findById(userId);
+    
     user.movies.push({ movieId: foundMovie._id, watched });
     await user.save();
 
