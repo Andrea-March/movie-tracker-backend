@@ -206,7 +206,6 @@ router.delete("/:userId/movies/:movieId", async (req, res) => {
     const user = await User.findById(userId);
     user.movies = user.movies.filter((m) => m.movieId.toString() !== movieId);
     await user.save();
-
     res.json({ message: "Movie removed from user's list" });
   } catch (err) {
     res.status(500).json({ error: err.message });
