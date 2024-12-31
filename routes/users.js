@@ -63,6 +63,9 @@ router.post("/:userId/movies", async (req, res) => {
     const user = await User.findById(userId);
     // Cerca o crea il film nella collezione Movies
     let foundMovie = await Movie.findOne({ id: movie.id });
+    if (foundMovie && user.movies.some((movie) => movie.movieId.toString() === foundMovie._id.toString())){
+      return res.status(400).json({ error: "Film già salvato!" });
+    }
 
     if (!foundMovie) {
       let trailerUrl = undefined;
@@ -82,8 +85,6 @@ router.post("/:userId/movies", async (req, res) => {
         vote_average: movie.vote_average,
       });
       await foundMovie.save();
-    }else if (user.movies.some((movie) => movie.movieId.toString() === movie.id)){
-      return res.status(400).json({ error: "Film già salvato!" });
     }
 
     // Aggiungi il riferimento al film nell'array movies dell'utente
@@ -167,7 +168,6 @@ router.put("/:userId/movies/:movieId", async (req, res) => {
     // Invalida la cache
     await deleteData(`watched_movies_${userId}`);
     await deleteData(`to_watch_movies_${userId}`);
-    console.log("cache invalidata con successo");
   } catch (err) {
     console.error(err);
   }
