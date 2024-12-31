@@ -63,10 +63,16 @@ router.post("/:userId/movies", async (req, res) => {
     const user = await User.findById(userId);
     // Cerca o crea il film nella collezione Movies
     let foundMovie = await Movie.findOne({ id: movie.id });
-    if (foundMovie && user.movies.some((movie) => movie.movieId.toString() === foundMovie._id.toString())){
-      return res.status(400).json({ error: "Film già salvato!" });
+    if (foundMovie) {
+      const userHasMovie = await User.exists({ 
+        _id: userId, 
+        "movies.movieId": foundMovie._id 
+      });
+    
+      if (userHasMovie) {
+        return res.status(400).json({ error: "Film già salvato!" });
+      }
     }
-
     if (!foundMovie) {
       let trailerUrl = undefined;
       try{
