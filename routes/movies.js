@@ -43,7 +43,7 @@ router.get("/search", async (req, res) => {
   }
   try{
     const cachedData = getData(`search_${query}`);
-    if(cacheData) return response.status(200).json(JSON.parse(cacheData));
+    if(cacheData) return response.status(200).json(JSON.parse(cachedData));
   }catch(err) {
     console.log("unable to access cache:" + err.message)
   }
@@ -259,6 +259,42 @@ router.get("/:movieId/trailer", async (req, res) => {
     res.status(500).json({ error: "Errore durante la ricerca dei film" });
   }
 });
+
+router.get("/:movieId/credits", async (req, res) => {
+  const {movieId} = req.params;
+  try{
+    const cachedData = await getData(`credits_${movieId}`)
+    if (cachedData) {
+      // Se i dati sono in cache, rispondi con i dati memorizzati
+      return res.json(JSON.parse(cachedData));
+    }
+  }catch(err) {
+    console.log(err)
+  }
+
+  try {
+    // Chiamata a TMDb API per cercare i film
+    const response = await axios.get(`${TMDB_MOVIE_API}${movieId}/credits `, {
+      headers: {
+        Authorization: `Bearer ${TMDB_ACCESS_TOKEN}`
+      },
+      params: {
+        language: "it-IT",
+      },
+    });
+
+    if (response.status !== 200) {
+      return res.status(404).json({ error: response.data.Error }); // Error handling
+    }
+    const credits = response.data.cast
+    quickCacheData(`credits_${movieId}`, JSON.stringify(credits))
+    res.json(credits);
+  } catch (err) {
+    console.error("Errore durante la ricerca TMDb:", err);
+    res.status(500).json({ error: "Errore durante la ricerca dei film" });
+  }
+});
+
 
  
 
