@@ -5,6 +5,7 @@ const User = require("../models/User");
 const Movie = require("../models/Movie");
 const {cacheData, getData, deleteData } = require("../utils/redisclient");
 const { getMovieTrailer } = require("./movies.js");
+const mongoose = require('mongoose');
 
 
 const router = express.Router();
@@ -104,13 +105,17 @@ router.post("/:userId/movies", async (req, res) => {
   }
 });
 
-// Ottieni i film di un utente
+// Ottieni i film visti di un utente
 router.get("/:userId/movies/watched", async (req, res) => {
   const { userId } = req.params;
 
+  const { page = 1, limit = 16, countPages } = req.query;
+
+  const skip = (page - 1) * limit;
+
   try {
     // Controlla se i dati sono già nella cache
-    const cachedData = await getData(`watched_movies_${userId}`);
+    const cachedData = await getData(`watched_movies_${userId}_page_${page}_limit_${limit}`);
     if (cachedData) {
       return res.json(JSON.parse(cachedData));
     }
@@ -119,27 +124,61 @@ router.get("/:userId/movies/watched", async (req, res) => {
   }
 
   try {
-    const user = await User.findById(userId).populate("movies.movieId");
-    const watchedMovies = user.movies
+    let totalPages = undefined;
+    if(countPages){
+            // Ottieni il numero totale di film (per calcolare totalPages)
+      const totalMovies = await User.aggregate([
+        { $match: { _id: new mongoose.Types.ObjectId(userId) } },
+        { $unwind: "$movies" },
+        { $match: { "movies.watched": true } },
+        { $count: "total" } // Conta il numero totale di film
+      ]);
+
+      const totalCount = totalMovies[0]?.total || 0; // Se non ci sono film, total è 0
+      totalPages = Math.ceil(totalCount / limit); // Calcola il numero totale di pagine
+    }
+    const movies = await User.aggregate([
+      { $match: { _id: new mongoose.Types.ObjectId(userId) } },
+      { $unwind: "$movies" }, // Scompatta l'array di film
+      { $match: { "movies.watched": true } }, // Filtra solo i film visti
+      { $sort: { "movies.addedAt": -1 } }, // Ordina per data
+      { $skip: skip }, // Salta i risultati per la paginazione
+      { $limit: limit }, // Limita i risultati
+      {
+        $lookup: { // Popola i dettagli del film
+          from: "movies",
+          localField: "movies.movieId",
+          foreignField: "_id",
+          as: "movieId",
+        },
+      },
+      { $unwind: "$movieId" }, // Scompatta i dettagli del film
+      { $project: { movies: 1, movieId: 1 } }, // Seleziona solo i campi necessari
+    ]);
+  /*   const watchedMovies = user.movies
                             .filter(movie => movie.watched)
-                            .sort((a, b) => b.addedAt - a.addedAt);
+                            .sort((a, b) => b.addedAt - a.addedAt); */
     
     // Salva nella cache con un TTL (es. 3600 secondi = 1 ora)
-    await cacheData(`watched_movies_${userId}`, JSON.stringify(watchedMovies));
-
-    res.json(watchedMovies);
+    await cacheData(`watched_movies_${userId}_page_${page}_limit_${limit}`, JSON.stringify({movies, totalPages}));
+    res.status(200).json({movies: movies, totalPages: totalPages});
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// Ottieni i film di un utente
+// Ottieni i film  da vedere di un utente
 router.get("/:userId/movies/to-watch", async (req, res) => {
   const { userId } = req.params;
 
+  const { page = 1, limit = 16, countPages } = req.query;
+
+  const skip = (page - 1) * limit;
+
+
   try {
     // Controlla se i dati sono già nella cache
-    const cachedData = await getData(`to_watch_movies_${userId}`);
+    const cachedData = await getData(`to_watch_movies_${userId}_page_${page}_limit_${limit}`);
     if (cachedData) {
       return res.json(JSON.parse(cachedData));
     }
@@ -148,17 +187,42 @@ router.get("/:userId/movies/to-watch", async (req, res) => {
   }
 
   try {
-    const user = await User
-                    .findById(userId)
-                    .populate("movies.movieId");
-    const toWatchMovies = user.movies
-                            .filter(movie => !movie.watched)
-                            .sort((a, b) => b.addedAt - a.addedAt);
+    let totalPages = undefined;
+    if(countPages){
+            // Ottieni il numero totale di film (per calcolare totalPages)
+      const totalMovies = await User.aggregate([
+        { $match: { _id: new mongoose.Types.ObjectId(userId) } },
+        { $unwind: "$movies" },
+        { $match: { "movies.watched": false } },
+        { $count: "total" } // Conta il numero totale di film
+      ]);
+
+      const totalCount = totalMovies[0]?.total || 0; // Se non ci sono film, total è 0
+      totalPages = Math.ceil(totalCount / limit); // Calcola il numero totale di pagine
+    }
+    const movies = await User.aggregate([
+      { $match: { _id: new mongoose.Types.ObjectId(userId) } },
+      { $unwind: "$movies" }, // Scompatta l'array di film
+      { $match: { "movies.watched": false } }, // Filtra solo i film visti
+      { $sort: { "movies.addedAt": -1 } }, // Ordina per data
+      { $skip: skip }, // Salta i risultati per la paginazione
+      { $limit: limit }, // Limita i risultati
+      {
+        $lookup: { // Popola i dettagli del film
+          from: "movies",
+          localField: "movies.movieId",
+          foreignField: "_id",
+          as: "movieId",
+        },
+      },
+      { $unwind: "$movieId" }, // Scompatta i dettagli del film
+      { $project: { movies: 1, movieId: 1 } }, // Seleziona solo i campi necessari
+    ]);
     
     // Salva nella cache con un TTL (es. 3600 secondi = 1 ora)
-    await cacheData(`to_watch_movies_${userId}`,  JSON.stringify(toWatchMovies));
+    await cacheData(`to_watch_movies_${userId}_page_${page}_limit_${limit}`,  JSON.stringify({movies, totalPages}));
 
-    res.json(toWatchMovies);
+    res.json({movies, totalPages});
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
