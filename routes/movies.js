@@ -62,8 +62,8 @@ router.get("/search", async (req, res) => {
     if (response.status !== 200) {
       return res.status(404).json({ error: response.data.Error }); // Error handling
     }
-    const limitedResults = response.data.results.slice(0, 3);
-    quickCacheData(`search_${query}`, JSON.stringify(limitedResults));
+    const limitedResults = response.data.results.slice(0, 5);
+    await quickCacheData(`search_${query}`, JSON.stringify(limitedResults));
     res.json(limitedResults); // Restituisce la lista di film trovati
   } catch (err) {
     console.error("Errore durante la ricerca OMDb:", err);
@@ -78,7 +78,7 @@ router.get('/popular', async (req, res) => {
     const cachedData = await getData(`popular_movies_page_${page}`)
     if (cachedData) {
       // Se i dati sono in cache, rispondi con i dati memorizzati
-      console.log(`Restituendo i dati dalla cache per la pagina ${page}`);
+      /* console.log(`Restituendo i dati dalla cache per la pagina ${page}`); */
       return res.json(JSON.parse(cachedData));
     }
   }catch(err) {
@@ -120,7 +120,7 @@ router.get('/top_rated', async (req, res) => {
     const cachedData = await getData(`top_rated_page_${page}`)
     if (cachedData) {
       // Se i dati sono in cache, rispondi con i dati memorizzati
-      console.log(`Restituendo i dati dalla cache per la pagina ${page}`);
+      /* console.log(`Restituendo i dati dalla cache per la pagina ${page}`); */
       return res.json(JSON.parse(cachedData));
     }
   }catch(err) {
@@ -162,7 +162,7 @@ router.get('/upcoming', async (req, res) => {
     const cachedData = await getData(`upcoming_page_${page}`)
     if (cachedData) {
       // Se i dati sono in cache, rispondi con i dati memorizzati
-      console.log(`Restituendo i dati dalla cache per la pagina ${page}`);
+      /* console.log(`Restituendo i dati dalla cache per la pagina ${page}`); */
       return res.json(JSON.parse(cachedData));
     }
   }catch(err) {

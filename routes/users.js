@@ -3,12 +3,15 @@ const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const User = require("../models/User");
 const Movie = require("../models/Movie");
-const {cacheData, getData, deleteData } = require("../utils/redisclient");
+const {getData, cacheDataForUser, deleteCacheKeysForUser } = require("../utils/redisclient");
 const { getMovieTrailer } = require("./movies.js");
 const mongoose = require('mongoose');
 
 
 const router = express.Router();
+
+const WATCHED_MOVIES_CACHE_KEY = "watched_movies"
+const TO_WATCH_MOVIES_CACHE_KEY = "to_watch_movies"
 
 // Registrazione utente
 router.post("/register", async (req, res) => {
@@ -49,13 +52,14 @@ router.post("/:userId/movies", async (req, res) => {
 
   try {
     // Invalida la cache
-    if(watched){
+    /* if(watched){
       await deleteData(`watched_movies_${userId}`);
     }else{
       await deleteData(`to_watch_movies_${userId}`);
-    }
+    } */
+    await  deleteCacheKeysForUser(userId);
     
-    console.log("cache invalidata con successo");
+    /* console.log("cache invalidata con successo"); */
   } catch (err) {
     console.error(err);
   }
@@ -115,7 +119,7 @@ router.get("/:userId/movies/watched", async (req, res) => {
 
   try {
     // Controlla se i dati sono già nella cache
-    const cachedData = await getData(`watched_movies_${userId}_page_${page}_limit_${limit}`);
+    const cachedData = await getData(`${WATCHED_MOVIES_CACHE_KEY}_${userId}_page_${page}_limit_${limit}`);
     if (cachedData) {
       return res.json(JSON.parse(cachedData));
     }
@@ -160,7 +164,7 @@ router.get("/:userId/movies/watched", async (req, res) => {
                             .sort((a, b) => b.addedAt - a.addedAt); */
     
     // Salva nella cache con un TTL (es. 3600 secondi = 1 ora)
-    await cacheData(`watched_movies_${userId}_page_${page}_limit_${limit}`, JSON.stringify({movies, totalPages}));
+    await cacheDataForUser(userId, `${WATCHED_MOVIES_CACHE_KEY}_${userId}_page_${page}_limit_${limit}`, JSON.stringify({movies, totalPages}));
     res.status(200).json({movies: movies, totalPages: totalPages});
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -178,7 +182,7 @@ router.get("/:userId/movies/to-watch", async (req, res) => {
 
   try {
     // Controlla se i dati sono già nella cache
-    const cachedData = await getData(`to_watch_movies_${userId}_page_${page}_limit_${limit}`);
+    const cachedData = await getData(`${TO_WATCH_MOVIES_CACHE_KEY}_${userId}_page_${page}_limit_${limit}`);
     if (cachedData) {
       return res.json(JSON.parse(cachedData));
     }
@@ -220,7 +224,7 @@ router.get("/:userId/movies/to-watch", async (req, res) => {
     ]);
     
     // Salva nella cache con un TTL (es. 3600 secondi = 1 ora)
-    await cacheData(`to_watch_movies_${userId}_page_${page}_limit_${limit}`,  JSON.stringify({movies, totalPages}));
+    await cacheDataForUser(userId, `${TO_WATCH_MOVIES_CACHE_KEY}_${userId}_page_${page}_limit_${limit}`,  JSON.stringify({movies, totalPages}));
 
     res.json({movies, totalPages});
   } catch (err) {
@@ -236,8 +240,9 @@ router.put("/:userId/movies/:movieId", async (req, res) => {
 
   try {
     // Invalida la cache
-    await deleteData(`watched_movies_${userId}`);
-    await deleteData(`to_watch_movies_${userId}`);
+    /* await deleteData(`watched_movies_${userId}`);
+    await deleteData(`to_watch_movies_${userId}`); */
+    await deleteCacheKeysForUser(userId);
   } catch (err) {
     console.error(err);
   }
@@ -265,9 +270,10 @@ router.delete("/:userId/movies/:movieId", async (req, res) => {
 
   try {
     // Invalida la cache
-    await deleteData(`watched_movies_${userId}`);
-    await deleteData(`to_watch_movies_${userId}`);
-    console.log("cache invalidata con successo");
+    /* await deleteData(`watched_movies_${userId}`);
+    await deleteData(`to_watch_movies_${userId}`); */
+    await deleteCacheKeysForUser(userId);
+    /* console.log("cache invalidata con successo"); */
   } catch (err) {
     console.error(err);
   }
