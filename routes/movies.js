@@ -41,12 +41,12 @@ router.get("/search", async (req, res) => {
   if (!query) {
     return res.status(400).json({ error: "Il parametro query è obbligatorio" });
   }
-  try{
-    const cachedData = getData(`search_${query}`);
+  /* try{
+    const cachedData = await getData(`search_${query}`);
     if(cacheData) return response.status(200).json(JSON.parse(cachedData));
   }catch(err) {
     console.log("unable to access cache:" + err.message)
-  }
+  } */
   try {
     // Chiamata a OMDb API per cercare i film
     const response = await axios.get("https://api.themoviedb.org/3/search/movie", {
@@ -63,7 +63,7 @@ router.get("/search", async (req, res) => {
       return res.status(404).json({ error: response.data.Error }); // Error handling
     }
     const limitedResults = response.data.results.slice(0, 5);
-    await quickCacheData(`search_${query}`, JSON.stringify(limitedResults));
+    /* await quickCacheData(`search_${query}`, JSON.stringify(limitedResults)); */
     res.json(limitedResults); // Restituisce la lista di film trovati
   } catch (err) {
     console.error("Errore durante la ricerca OMDb:", err);
