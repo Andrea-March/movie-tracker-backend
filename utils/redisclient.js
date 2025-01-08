@@ -71,7 +71,6 @@ const redis = new Redis({
     try {
       await redis.set(key, JSON.stringify(value), "EX", expiry); // Salva i dati nella cache
       await redis.sadd(`cache_keys:${userId}`, key); // Aggiungi la chiave al set dell'utente
-      console.log(`Dato memorizzato nella cache e chiave '${key}' registrata per utente ${userId}`);
     } catch (err) {
       console.error("Errore durante l'aggiunta alla cache:", err);
       throw new Error(err);
@@ -83,10 +82,10 @@ const redis = new Redis({
       const keys = await redis.smembers(`cache_keys:${userId}`);
       if (keys.length > 0) {
         await redis.del(keys); // Elimina tutte le chiavi utente
-        console.log(`Chiavi ${keys} eliminate per l'utente ${userId}`);
+        /* console.log(`Chiavi ${keys} eliminate per l'utente ${userId}`); */
       }
       await redis.del(`cache_keys:${userId}`); // Elimina il set stesso
-      console.log(`Set di chiavi eliminato per l'utente ${userId}`);
+      /* console.log(`Set di chiavi eliminato per l'utente ${userId}`); */
     } catch (err) {
       console.error("Errore durante l'eliminazione delle chiavi:", err);
       throw new Error(err);
