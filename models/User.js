@@ -11,6 +11,9 @@ const userSchema = new mongoose.Schema({
       addedAt: { type: Date, default: Date.now },
     },
   ],
+  activeChallenges: [
+    { type: mongoose.Schema.Types.ObjectId, ref: "Challenge" }, // Riferimento alle sfide attive
+  ],
 });
 
 module.exports = mongoose.model("User", userSchema);

@@ -3,6 +3,7 @@ const express = require("express");
 const router = express.Router();
 const {cacheData, getData, quickCacheData} = require ("../utils/redisclient");
 const { Error } = require("mongoose");
+const { authMiddleware } = require("./authroutes");
 
 // La tua API Key OMDb
 const TMDB_ACCESS_TOKEN = process.env.TMDB_ACCESS_TOKEN; // Inserisci la tua API key OMDb
@@ -35,7 +36,7 @@ const TMDB_MOVIE_API= "https://api.themoviedb.org/3/movie/"
   }
 }); */
 
-router.get("/search", async (req, res) => {
+router.get("/search", authMiddleware, async (req, res) => {
   const { query } = req.query;
 
   if (!query) {
@@ -71,7 +72,7 @@ router.get("/search", async (req, res) => {
   }
 });
 
-router.get('/popular', async (req, res) => {
+router.get('/popular', authMiddleware, async (req, res) => {
   const page = parseInt(req.query.page) || 1;
 
   try{
@@ -113,7 +114,7 @@ router.get('/popular', async (req, res) => {
   }
 });
 
-router.get('/top_rated', async (req, res) => {
+router.get('/top_rated', authMiddleware, async (req, res) => {
   const page = parseInt(req.query.page) || 1;
 
   try{
@@ -155,7 +156,7 @@ router.get('/top_rated', async (req, res) => {
   }
 });
 
-router.get('/upcoming', async (req, res) => {
+router.get('/upcoming', authMiddleware, async (req, res) => {
   const page = parseInt(req.query.page) || 1;
 
   try{
@@ -197,6 +198,69 @@ router.get('/upcoming', async (req, res) => {
   }
 });
 
+
+// Endpoint per ottenere i film per decennio con paginazione e caching
+router.get("/movies-by-decade", authMiddleware, async (req, res) => {
+  const { decade, page = 1 } = req.query; // Decennio e pagina (default 1)
+
+  if (!decade) {
+    return res.status(400).json({ error: "Decennio non specificato" });
+  }
+
+  const startYear = decade;
+  const endYear = parseInt(decade) + 10;
+  const startDate = `01/01/${startYear}`;
+  const endDate = `01/01/${endYear}`;
+  // Crea una chiave unica per la cache
+  const cacheKey = `movies_${decade}_page_${page}`;
+
+  try {
+    // Verifica se i dati sono già presenti in cache
+    const cachedData = await getData(cacheKey);
+    if (cachedData) {
+      console.log("Restituendo dati dalla cache");
+      return res.json(JSON.parse(cachedData));
+    }
+
+    // Chiamata a TMDb API con paginazione
+    const response = await axios.get("https://api.themoviedb.org/3/discover/movie", {
+      headers: {
+        Authorization: `Bearer ${TMDB_ACCESS_TOKEN}`,
+      },
+      params: {
+        language: "it-IT",
+        'primary_release_date.gte': startDate,
+        'primary_release_date.lte': endDate,
+        sort_by: "vote_average.desc",
+        "vote_count.gte": 1000,
+        page, // Paginazione
+      },
+    });
+
+    const movies = response.data.results;
+    const totalPages = response.data.total_pages;
+    const currentPage = page;
+
+    // Memorizza i dati in cache
+    cacheData(cacheKey, JSON.stringify({
+      decade: `${startYear}s`,
+      movies: response.data.results,
+      totalPages,
+      currentPage,
+    }));
+
+    // Rispondi con i film trovati
+    res.json({
+      decade: `${startYear}s`,
+      movies,
+      totalPages,
+      currentPage,
+    });
+  } catch (err) {
+    res.status(500).json({ error: "Errore durante la ricerca dei film"+ err.message });
+  }
+});
+
 router.get('/providers/:movieId', async (req, res) => {
   const {movieId} = req.params;
 
@@ -233,7 +297,7 @@ router.get('/providers/:movieId', async (req, res) => {
   }
 });
 
-router.get("/:movieId/trailer", async (req, res) => {
+router.get("/:movieId/trailer", authMiddleware, async (req, res) => {
   const {movieId} = req.params;
   try{
     const cachedData = await getData(`trailer_${movieId}`)
@@ -259,7 +323,7 @@ router.get("/:movieId/trailer", async (req, res) => {
   }
 });
 
-router.get("/:movieId/credits", async (req, res) => {
+router.get("/:movieId/credits", authMiddleware, async (req, res) => {
   const {movieId} = req.params;
   try{
     const cachedData = await getData(`credits_${movieId}`)
