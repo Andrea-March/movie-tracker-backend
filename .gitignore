@@ -1,4 +1,5 @@
 .env 
+/firebase_auth.json
 
 # dependencies
 /node_modules

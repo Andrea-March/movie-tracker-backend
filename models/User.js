@@ -14,6 +14,7 @@ const userSchema = new mongoose.Schema({
   activeChallenges: [
     { type: mongoose.Schema.Types.ObjectId, ref: "Challenge" }, // Riferimento alle sfide attive
   ],
+  fcmToken: { type: String }, // campo per le notifiche push firebase
 });
 
 module.exports = mongoose.model("User", userSchema);

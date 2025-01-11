@@ -6,7 +6,7 @@ const Movie = require("../models/Movie");
 const {getData, cacheDataForUser, deleteCacheKeysForUser } = require("../utils/redisclient");
 const { getMovieTrailer } = require("./movies.js");
 const mongoose = require('mongoose');
-
+const { updateFcmToken } = require ("./notifications.js")
 
 const router = express.Router();
 
@@ -43,6 +43,18 @@ router.post("/login", async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
+});
+
+// Endpoint per aggiornare il token FCM
+router.post('/update-fcm-token', async (req, res) => {
+  const { userId, token } = req.body;
+  
+  if (!userId || !token) {
+    return res.status(400).send('User ID and token are required');
+  }
+
+  const result = await updateFcmToken(userId, token);
+  res.status(result.status).send(result.message);
 });
 
 // Aggiungi un film per un utente
