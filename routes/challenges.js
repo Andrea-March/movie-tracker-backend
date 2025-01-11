@@ -5,36 +5,81 @@ const UserProgress = require("../models/UserProgress")
 const Movie = require("../models/Movie"); // Assumendo che il modello Movie sia già implementato
 const axios = require("axios");
 const { authMiddleware } = require("./authroutes");
+const {getMoviesByDecade, getMovieTrailer} = require("./movies.js")
+
+
+// Funzione per introdurre un ritardo
+const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 // Crea una sfida
 // POST /challenges/create
-router.post("/create", authMiddleware, async (req, res) => {
-  const { title, theme, goal, startDate, endDate, genreIds } = req.body;
+router.post("/", async (req, res) => {
+  const { title, theme, startDate, endDate, goal, queryParams={} } = req.body;
+  const {decade} = req.query;
+
+  if (!title || !theme || !startDate || !endDate || !goal || !queryParams) {
+    return res.status(400).json({ error: "Tutti i campi sono obbligatori." });
+  }
+
+
+  const startYear = decade;
+  const endYear = parseInt(decade) + 10;
+  const decadeStartDate = `01/01/${startYear}`;
+  const decadeEndDate = `01/01/${endYear}`;
+
+  const maxRequestsPerSecond = 15; // Limite di TMDb
+  const delayMs = 1000 / maxRequestsPerSecond; // Ritardo necessario tra le richieste
+
 
   try {
-    // Recupera i film suggeriti da TMDb
-    const response = await axios.get(`${TMDB_MOVIE_API}discover/movie`, {
-      headers: {
-        Authorization: `Bearer ${TMDB_ACCESS_TOKEN}`,
-      },
-      params: {
-        language: "it-IT",
-        with_genres: genreIds.join(","), // Filtra per generi specifici
-        sort_by: "popularity.desc",
-      },
-    });
+    const suggestedMovies = [];
+    console.log("startd cycle")
 
-    if (response.status !== 200) {
-      return res.status(400).json({ error: "Errore nella chiamata a TMDb" });
+    // Iterare sulle prime 5 pagine di TMDb
+    for (let page = 1; page <= 5; page++) {
+
+      const data = await getMoviesByDecade(startYear, decadeStartDate, decadeEndDate, page)
+
+      for (const movie of data.movies) {
+        const existingMovie = await Movie.findOne({ id: movie.id });
+
+        let movieId;
+
+        if (!existingMovie) {
+           let trailerUrl = undefined;
+            try{
+              trailerUrl = await getMovieTrailer(movie.id);
+            }catch(err){
+              console.log("unable to find trailer you tube key for movie"+movie.title)
+            }
+          // Creare un nuovo film
+          const newMovie = new Movie({
+            id: movie.id,
+            title: movie.title,
+            overview: movie.overview,
+            poster_path:"https://image.tmdb.org/t/p/original" + movie.poster_path,
+            trailer_url: trailerUrl,
+            release_date: movie.release_date,
+            genre_ids: movie.genre_ids,
+            vote_average: movie.vote_average,
+          });
+
+          const savedMovie = await newMovie.save();
+          movieId = savedMovie._id;
+        } else {
+          movieId = existingMovie._id; // Prendi l'ID se il film esiste già
+        }
+
+        // Aggiungere il film all'array di film suggeriti
+        suggestedMovies.push({ movieId, title: movie.title });
+      }
+      //Rate limiter per non superare il limite dell'api TMDb
+      if (page < maxPages) {
+        await delay(delayMs);
+      }
     }
 
-    // Crea la lista dei film suggeriti
-    const suggestedMovies = response.data.results.map((movie) => ({
-      movieId: movie.id,
-      title: movie.title,
-    }));
-
-    // Crea una nuova sfida
+    // Creare la nuova sfida
     const challenge = new Challenge({
       title,
       theme,
@@ -44,11 +89,12 @@ router.post("/create", authMiddleware, async (req, res) => {
       endDate,
     });
 
-    await challenge.save();
-    res.status(201).json({ message: "Sfida creata con successo!", challenge });
-  } catch (err) {
-    console.error("Errore nella creazione della sfida:", err);
-    res.status(500).json({ error: "Errore interno del server" });
+    const savedChallenge = await challenge.save();
+
+    res.status(201).json(savedChallenge);
+  } catch (error) {
+    console.error("Errore durante la creazione della sfida:", error.message);
+    res.status(500).json({ error: "Errore durante la creazione della sfida." });
   }
 });
 
@@ -56,7 +102,7 @@ router.post("/create", authMiddleware, async (req, res) => {
 // Recupera tutte le sfide attive a cui un utente può unirsi o che ha completato
 // GET /challenges
 router.get("/", authMiddleware, async (req, res) => {
-    const userId = req.user.id; // Decodificato dal middleware JWT
+    const userId = req.userId; // Decodificato dal middleware JWT
   
     try {
       // Recupera tutte le sfide attive
@@ -187,42 +233,60 @@ router.patch("/:challengeId/progress", authMiddleware, async (req, res) => {
 // Recupera i progressi di una certa sfida per un utente 
 // GET /challenges/:challengeId/progress
 router.get("/:challengeId/progress", authMiddleware, async (req, res) => {
-    const { challengeId } = req.params;
-    const userId = req.user.id; // Decodificato dal middleware JWT
-  
-    try {
-      // Trova la sfida
-      const challenge = await Challenge.findById(challengeId);
-      if (!challenge) {
-        return res.status(404).json({ error: "Sfida non trovata" });
-      }
-  
-      // Trova il progresso dell'utente per questa sfida
-      const userProgress = await UserProgress.findOne({ userId, challengeId }).populate("selectedMovies.movieId");
-      if (!userProgress) {
-        return res.status(404).json({ error: "Progressi non trovati per questa sfida" });
-      }
-  
-      // Restituisci i dettagli dei progressi
-      const progressDetails = {
-        challengeId: challenge._id,
-        title: challenge.title,
-        theme: challenge.theme,
-        goal: challenge.goal,
-        progress: userProgress.progress,
-        completed: userProgress.completed,
-        selectedMovies: userProgress.selectedMovies.map((movie) => ({
-          movieId: movie.movieId._id,
-          title: movie.movieId.title,
-          watched: movie.watched,
-          watchedAt: movie.watchedAt,
-        })),
-      };
-  
-      res.status(200).json(progressDetails);
-    } catch (err) {
-      console.error("Errore durante il recupero dei progressi:", err);
-      res.status(500).json({ error: "Errore interno del server" });
+  const { challengeId } = req.params;
+  const userId = req.userId; // Decodificato dal middleware JWT
+  const page = parseInt(req.query.page, 10) || 1; // Pagina corrente (default: 1)
+  const limit = parseInt(req.query.limit, 20) || 20; // Numero di film per pagina (default: 10)
+
+  try {
+    // Trova la sfida
+    const challenge = await Challenge.findById(challengeId);
+    if (!challenge) {
+      return res.status(404).json({ error: "Sfida non trovata" });
     }
-  });
+
+    // Trova il progresso dell'utente per questa sfida
+    const userProgress = await UserProgress.findOne({ userId, challengeId })
+    .populate({
+      path: "selectedMovies.movieId",
+      options: { limit, skip: (page - 1) * limit }, // Paginazione diretta su MongoDB
+    });
+
+    if (!userProgress) {
+      return res.status(404).json({ error: "Progressi non trovati per questa sfida" });
+    }
+
+    // Calcolo della paginazione
+    const totalMovies = userProgress.selectedMovies.length; // Numero totale di film selezionati
+    const totalPages = Math.ceil(totalMovies / limit); // Calcola il numero totale di pagine
+
+    // Restituisci i dettagli dei progressi con paginazione
+    const progressDetails = {
+      challengeId: challenge._id,
+      title: challenge.title,
+      theme: challenge.theme,
+      goal: challenge.goal,
+      progress: userProgress.progress,
+      completed: userProgress.completed,
+      selectedMovies: userProgress.selectedMovies.map((movie) => ({
+        movieId: movie.movieId._id,
+        title: movie.movieId.title,
+        watched: movie.watched,
+        watchedAt: movie.watchedAt,
+      })),
+      pagination: {
+        currentPage: page,
+        totalPages,
+        totalMovies,
+      },
+    };
+
+    res.status(200).json(progressDetails);
+  } catch (err) {
+    console.error("Errore durante il recupero dei progressi:", err);
+    res.status(500).json({ error: "Errore interno del server" });
+  }
+});
+
+
 module.exports = router;

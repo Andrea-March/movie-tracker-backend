@@ -7,7 +7,8 @@ const { authMiddleware } = require("./authroutes");
 
 // La tua API Key OMDb
 const TMDB_ACCESS_TOKEN = process.env.TMDB_ACCESS_TOKEN; // Inserisci la tua API key OMDb
-const TMDB_MOVIE_API= "https://api.themoviedb.org/3/movie/"
+const TMDB_MOVIE_API= "https://api.themoviedb.org/3/movie/";
+const TMDB_MOVIE_DISCOVER_API = "https://api.themoviedb.org/3/discover/movie";
 // Cerca un film tramite OMDb API
 /* router.get("/search", async (req, res) => {
   const { query } = req.query;
@@ -223,43 +224,18 @@ router.get("/movies-by-decade", authMiddleware, async (req, res) => {
     }
 
     // Chiamata a TMDb API con paginazione
-    const response = await axios.get("https://api.themoviedb.org/3/discover/movie", {
-      headers: {
-        Authorization: `Bearer ${TMDB_ACCESS_TOKEN}`,
-      },
-      params: {
-        language: "it-IT",
-        'primary_release_date.gte': startDate,
-        'primary_release_date.lte': endDate,
-        sort_by: "vote_average.desc",
-        "vote_count.gte": 1000,
-        page, // Paginazione
-      },
-    });
-
-    const movies = response.data.results;
-    const totalPages = response.data.total_pages;
-    const currentPage = page;
+    const data = await getMoviesByDecade(startYear, startDate, endDate, page);
 
     // Memorizza i dati in cache
-    cacheData(cacheKey, JSON.stringify({
-      decade: `${startYear}s`,
-      movies: response.data.results,
-      totalPages,
-      currentPage,
-    }));
+    cacheData(cacheKey, JSON.stringify(data));
 
     // Rispondi con i film trovati
-    res.json({
-      decade: `${startYear}s`,
-      movies,
-      totalPages,
-      currentPage,
-    });
+    res.json(data);
   } catch (err) {
     res.status(500).json({ error: "Errore durante la ricerca dei film"+ err.message });
   }
 });
+
 
 router.get('/providers/:movieId', async (req, res) => {
   const {movieId} = req.params;
@@ -360,6 +336,38 @@ router.get("/:movieId/credits", authMiddleware, async (req, res) => {
 
 
  
+async function getMoviesByDecade (startYear, startDate, endDate, page){
+  try {
+    // Chiamata a TMDb API con paginazione
+    const response = await axios.get(TMDB_MOVIE_DISCOVER_API, {
+      headers: {
+        Authorization: `Bearer ${TMDB_ACCESS_TOKEN}`,
+      },
+      params: {
+        language: "it-IT",
+        'primary_release_date.gte': startDate,
+        'primary_release_date.lte': endDate,
+        sort_by: "vote_average.desc",
+        "vote_count.gte": 1000,
+        page, // Paginazione
+      },
+    });
+
+    const movies = response.data.results;
+    const totalPages = response.data.total_pages;
+    const currentPage = page;
+
+    return({
+      decade: `${startYear}s`,
+      movies,
+      totalPages,
+      currentPage,
+    })
+  } catch (err) {
+    throw err;
+  }
+  return;
+} 
 
 
 async function getMovieTrailer(movieId){
@@ -392,3 +400,5 @@ async function getMovieTrailer(movieId){
 }
 
 module.exports = router;
+module.exports.getMoviesByDecade = getMoviesByDecade;
+module.exports.getMovieTrailer = getMovieTrailer;
