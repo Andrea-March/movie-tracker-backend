@@ -5,7 +5,9 @@ const UserProgress = require("../models/UserProgress")
 const Movie = require("../models/Movie"); // Assumendo che il modello Movie sia già implementato
 const axios = require("axios");
 const { authMiddleware } = require("./authroutes");
-const {getMoviesByDecade, getMovieTrailer} = require("./movies.js")
+const {getMoviesByDecade, getMovieTrailer} = require("./movies.js");
+const { getData, cacheData } = require("../utils/redisclient.js");
+const mongoose = require('mongoose');
 
 
 // Funzione per introdurre un ritardo
@@ -101,6 +103,7 @@ router.post("/", async (req, res) => {
 
 // Recupera tutte le sfide attive a cui un utente può unirsi o che ha completato
 // GET /challenges
+// returns availableChallenges, joinedChallenges
 router.get("/", authMiddleware, async (req, res) => {
     const userId = req.userId; // Decodificato dal middleware JWT
   
@@ -117,9 +120,13 @@ router.get("/", authMiddleware, async (req, res) => {
       const availableChallenges = challenges.filter(
         (challenge) => !completedChallengeIds.includes(challenge._id.toString())
       );
+
+      const joinedChallenges = challenges.filter(
+        (challenge) => completedChallengeIds.includes(challenge._id.toString())
+      );
   
       res.status(200).json({
-        challenges: availableChallenges.map((challenge) => ({
+        availableChallenges: availableChallenges.map((challenge) => ({
           challengeId: challenge._id,
           title: challenge.title,
           theme: challenge.theme,
@@ -127,6 +134,14 @@ router.get("/", authMiddleware, async (req, res) => {
           startDate: challenge.startDate,
           endDate: challenge.endDate,
         })),
+        joinedChallenges : joinedChallenges.map((challenge) => ({
+          challengeId: challenge._id,
+          title: challenge.title,
+          theme: challenge.theme,
+          goal: challenge.goal,
+          startDate: challenge.startDate,
+          endDate: challenge.endDate,
+        }))
       });
     } catch (err) {
       console.error("Errore durante il recupero delle sfide:", err);
@@ -231,7 +246,13 @@ router.patch("/:challengeId/progress", authMiddleware, async (req, res) => {
   });
 
 // Recupera i progressi di una certa sfida per un utente 
-// GET /challenges/:challengeId/progress
+/**
+ * @route GET /api/challenges/:challengeId/movies
+ * @description Ritorna i film suggeriti per una challenge specifica con paginazione
+ * @param {String} challengeId - ID della challenge
+ * @param {Number} page - Numero della pagina (default: 1)
+ * @param {Number} limit - Numero di risultati per pagina (default: 20)
+ */
 router.get("/:challengeId/progress", authMiddleware, async (req, res) => {
   const { challengeId } = req.params;
   const userId = req.userId; // Decodificato dal middleware JWT
@@ -249,44 +270,132 @@ router.get("/:challengeId/progress", authMiddleware, async (req, res) => {
     const userProgress = await UserProgress.findOne({ userId, challengeId })
     .populate({
       path: "selectedMovies.movieId",
-      options: { limit, skip: (page - 1) * limit }, // Paginazione diretta su MongoDB
     });
 
     if (!userProgress) {
-      return res.status(404).json({ error: "Progressi non trovati per questa sfida" });
+      const challengeDetails = {
+        challengeId: challenge._id,
+        title: challenge.title,
+        theme: challenge.theme,
+        goal: challenge.goal,
+        joined: false,
+        endDate: challenge.endDate,
+      };
+  
+      return res.status(200).json(challengeDetails);
     }
 
     // Calcolo della paginazione
     const totalMovies = userProgress.selectedMovies.length; // Numero totale di film selezionati
-    const totalPages = Math.ceil(totalMovies / limit); // Calcola il numero totale di pagine
+    
 
     // Restituisci i dettagli dei progressi con paginazione
-    const progressDetails = {
+    const challengeDetails = {
       challengeId: challenge._id,
       title: challenge.title,
       theme: challenge.theme,
       goal: challenge.goal,
-      progress: userProgress.progress,
-      completed: userProgress.completed,
-      selectedMovies: userProgress.selectedMovies.map((movie) => ({
-        movieId: movie.movieId._id,
-        title: movie.movieId.title,
-        watched: movie.watched,
-        watchedAt: movie.watchedAt,
-      })),
-      pagination: {
-        currentPage: page,
-        totalPages,
-        totalMovies,
+      endDate: challenge.endDate,
+      progressDetail: {
+        progress: userProgress.progress,
+        completed: userProgress.completed,
+        selectedMovies: userProgress.selectedMovies.map((movie) => ({
+                            movieId: movie.movieId._id,
+                            title: movie.movieId.title,
+                            watched: movie.watched,
+                            watchedAt: movie.watchedAt,
+                        })),
       },
+      joined: true,
     };
 
-    res.status(200).json(progressDetails);
+    res.status(200).json(challengeDetails);
   } catch (err) {
     console.error("Errore durante il recupero dei progressi:", err);
     res.status(500).json({ error: "Errore interno del server" });
   }
 });
 
+
+/**
+ * @route GET /api/challenges/:challengeId/movies
+ * @description Ritorna i film suggeriti per una challenge specifica con paginazione
+ * @param {String} challengeId - ID della challenge
+ * @param {Number} page - Numero della pagina (default: 1)
+ * @param {Number} limit - Numero di risultati per pagina (default: 20)
+ */
+router.get("/:challengeId/movies", async (req, res) => {
+  try {
+    const { challengeId } = req.params;
+    const { page = 1, limit = 20 } = req.query;
+
+    // Valida page e limit
+    const pageNumber = Math.max(1, parseInt(page));
+    const limitNumber = Math.max(1, parseInt(limit));
+    try{
+      const cachedData = await getData(`suggested_movies_${challengeId}_${page}_${limit}`)
+      if (cachedData) {
+        // Se i dati sono in cache, rispondi con i dati memorizzati
+        return res.json(JSON.parse(cachedData));
+      }
+    }catch(err) {
+      console.log(err)
+    }
+
+    const skip = (page - 1) * limit;
+    const movies = await Challenge.aggregate([
+          { $match: { _id: new mongoose.Types.ObjectId(challengeId) } },
+          { $unwind: "$suggestedMovies" }, // Scompatta l'array di film
+          { $skip: skip }, // Salta i risultati per la paginazione
+          { $limit: limit }, // Limita i risultati
+          {
+            $lookup: { // Popola i dettagli del film
+              from: "movies",
+              localField: "suggestedMovies.movieId",
+              foreignField: "_id",
+              as: "movieId",
+            },
+          },
+          { $unwind: "$movieId" }, // Scompatta i dettagli del film
+          { $project: {movieId: 1, title: 1, poster_path:1 } }, // Seleziona solo i campi necessari
+        ]);
+
+   /*  // Trova la challenge e popola i film suggeriti con paginazione
+    const challenge = await Challenge.findById(challengeId)
+      .populate({
+        path: "suggestedMovies.movieId",
+        select: "title poster_path id",
+        options: {
+          skip: (pageNumber - 1) * limitNumber,
+          limit: limitNumber,
+        },
+      });
+ */
+      
+    if (!movies) {
+      return res.status(404).json({ message: "Film non trovati" });
+    }
+
+    // Conta il numero totale di film suggeriti
+    /* const totalMovies = challenge.suggestedMovies.length;
+    const totalPages = Math.ceil(totalMovies / limit); // Calcola il numero totale di pagine */
+    const totalPages = 5;
+    const totalMovies = 100;
+    const suggestedMovies = {
+      movies,
+      pagination: {
+        currentPage: page,
+        totalPages,
+        totalMovies,
+        limit: limitNumber,
+      },
+    }
+    cacheData(`suggested_movies_${challengeId}_${page}_${limit}` , JSON.stringify(suggestedMovies))
+    res.status(200).json(suggestedMovies);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Errore del server", error: error.message });
+  }
+});
 
 module.exports = router;

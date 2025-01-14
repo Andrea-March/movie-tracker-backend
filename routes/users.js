@@ -46,7 +46,7 @@ router.post("/login", async (req, res) => {
 });
 
 // Endpoint per aggiornare il token FCM
-router.post('/update-fcm-token', async (req, res) => {
+router.post('/fcm-token', async (req, res) => {
   const { userId, token } = req.body;
   
   if (!userId || !token) {
