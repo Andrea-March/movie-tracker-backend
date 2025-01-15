@@ -155,7 +155,7 @@ router.get("/", authMiddleware, async (req, res) => {
 router.post("/:challengeId/join", authMiddleware, async (req, res) => {
     const { challengeId } = req.params;
     const { selectedMovies } = req.body; // Array di movieId selezionati dall'utente
-    const userId = req.user.id; // Decodificato dal middleware JWT
+    const userId = req.userId; // Decodificato dal middleware JWT
   
     try {
       // Controlla che la sfida esista
@@ -164,7 +164,7 @@ router.post("/:challengeId/join", authMiddleware, async (req, res) => {
         return res.status(404).json({ error: "Sfida non trovata" });
       }
   
-      // Controlla che i film selezionati facciano parte dei film suggeriti
+/*       // Controlla che i film selezionati facciano parte dei film suggeriti
       const validMovies = challenge.suggestedMovies.map((movie) => movie.movieId.toString());
       const invalidMovies = selectedMovies.filter((movieId) => !validMovies.includes(movieId));
       if (invalidMovies.length > 0) {
@@ -172,7 +172,7 @@ router.post("/:challengeId/join", authMiddleware, async (req, res) => {
           error: "Alcuni film selezionati non fanno parte dei suggeriti",
           invalidMovies,
         });
-      }
+      } */
   
       // Controlla che l'utente non abbia già progressi per questa sfida
       const existingProgress = await UserProgress.findOne({ userId, challengeId });
@@ -184,10 +184,7 @@ router.post("/:challengeId/join", authMiddleware, async (req, res) => {
       const userProgress = new UserProgress({
         userId,
         challengeId,
-        selectedMovies: selectedMovies.map((movieId) => ({
-          movieId,
-          watched: false,
-        })),
+        selectedMovies: [],
       });
   
       await userProgress.save();
