@@ -6,7 +6,8 @@ const Movie = require("../models/Movie");
 const {getData, cacheDataForUser, deleteCacheKeysForUser } = require("../utils/redisclient");
 const { getMovieTrailer } = require("./movies.js");
 const mongoose = require('mongoose');
-const { updateFcmToken } = require ("./notifications.js")
+const { updateFcmToken } = require ("./notifications.js");
+const { authMiddleware } = require("./authroutes.js");
 
 const router = express.Router();
 
@@ -58,7 +59,7 @@ router.post('/fcm-token', async (req, res) => {
 });
 
 // Aggiungi un film per un utente
-router.post("/:userId/movies", async (req, res) => {
+router.post("/:userId/movies", authMiddleware, async (req, res) => {
   const { userId } = req.params;
   const { movie, watched } = req.body;
 
@@ -122,7 +123,7 @@ router.post("/:userId/movies", async (req, res) => {
 });
 
 // Ottieni i film visti di un utente
-router.get("/:userId/movies/watched", async (req, res) => {
+router.get("/:userId/movies/watched", authMiddleware, async (req, res) => {
   const { userId } = req.params;
 
   const { page = 1, limit = 16, countPages } = req.query;
@@ -184,7 +185,7 @@ router.get("/:userId/movies/watched", async (req, res) => {
 });
 
 // Ottieni i film  da vedere di un utente
-router.get("/:userId/movies/to-watch", async (req, res) => {
+router.get("/:userId/movies/to-watch", authMiddleware, async (req, res) => {
   const { userId } = req.params;
 
   const { page = 1, limit = 16, countPages } = req.query;
@@ -246,7 +247,7 @@ router.get("/:userId/movies/to-watch", async (req, res) => {
 
 
 // Aggiorna lo stato di un film
-router.put("/:userId/movies/:movieId", async (req, res) => {
+router.put("/:userId/movies/:movieId", authMiddleware, async (req, res) => {
   const { userId, movieId } = req.params;
   const { watched } = req.body;
 
@@ -277,7 +278,7 @@ router.put("/:userId/movies/:movieId", async (req, res) => {
 });
 
 // Elimina un film dall'utente
-router.delete("/:userId/movies/:movieId", async (req, res) => {
+router.delete("/:userId/movies/:movieId", authMiddleware, async (req, res) => {
   const { userId, movieId } = req.params;
 
   try {
