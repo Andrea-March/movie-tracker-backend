@@ -73,6 +73,18 @@ router.get("/search", authMiddleware, async (req, res) => {
   }
 });
 
+router.get("/detail/:movieId", authMiddleware, async (req, res) => {
+  const {movieId} = req.params;
+ 
+  try {
+     let movieDetail = await getMovieById(movieId);
+    res.json(movieDetail); // Restituisce il film trovato
+  } catch (err) {
+    console.error("Errore durante la ricerca OMDb:", err);
+    res.status(500).json({ error: "Errore durante la ricerca del film" });
+  }
+});
+
 router.get('/popular', authMiddleware, async (req, res) => {
   const page = parseInt(req.query.page) || 1;
 
@@ -399,6 +411,28 @@ async function getMovieTrailer(movieId){
   }
 }
 
+async function getMovieById(movieId){
+  try {
+    // Chiamata a OMDb API per cercare i film
+    const response = await axios.get(`https://api.themoviedb.org/3/movie/${movieId}`, {
+      headers:{
+        Authorization: `Bearer ${TMDB_ACCESS_TOKEN}`
+      },
+      params: {
+        language: "it-IT",
+      },
+    });
+
+    if (response.status !== 200) {
+      throw new Error({ error: response.data.Error }); // Error handling
+    }
+    return response.data;
+  } catch (err) {
+    console.error("Errore durante la ricerca OMDb:", err);
+    throw new Error("Errore durante la ricerca del film: getMovieById")
+  }
+}
 module.exports = router;
 module.exports.getMoviesByDecade = getMoviesByDecade;
 module.exports.getMovieTrailer = getMovieTrailer;
+module.exports.getMovieById = getMovieById;

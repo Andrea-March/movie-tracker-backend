@@ -8,6 +8,8 @@ const movieSchema = new mongoose.Schema({
   release_date: { type: Date },
   trailer_url: {type: String},
   genre_ids: [Number],
+  genres:[String],
+  runtime: {type: Number},
   vote_average: {type: Number}
 });
 
