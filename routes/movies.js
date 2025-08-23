@@ -346,7 +346,58 @@ router.get("/:movieId/credits", authMiddleware, async (req, res) => {
   }
 });
 
+router.get('/:movieId/related', authMiddleware, async (req, res) => {
+  const movieId = req.params.movieId;
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.body.limit) || 10; /* quanti film mostrare per pagina (tmdb defaults to 20) */
 
+  if (!movieId) {
+    return res.status(400).json({ error: "Movie ID mancante" });
+  }
+
+  const cacheKey = `related_movies_${movieId}_page_${page}`;
+
+  // Controllo cache
+  try {
+    const cachedData = await getData(cacheKey);
+    if (cachedData) {
+      return res.json(JSON.parse(cachedData));
+    }
+  } catch (err) {
+    console.error("Errore cache:", err);
+  }
+
+  // Chiamata TMDB
+  try {
+    const response = await axios.get(`${TMDB_MOVIE_API}${movieId}/recommendations`, {
+      headers: {
+        Authorization: `Bearer ${TMDB_ACCESS_TOKEN}`
+      },
+      params: {
+        language: "it-IT",
+        page
+      }
+    });
+
+    if (response.status !== 200) {
+      return res.status(404).json({ error: "Dati non trovati" });
+    }
+
+    const responseObject = {
+      movies: response.data.results.slice(0, limit),
+      totalPages: response.data.total_pages,
+      currentPage: page,
+    };
+
+    // Salva in cache
+    await cacheData(cacheKey, JSON.stringify(responseObject));
+
+    res.json(responseObject);
+  } catch (err) {
+    console.error("Errore TMDB:", err);
+    res.status(500).json({ error: "Errore durante la ricerca dei film correlati" });
+  }
+});
  
 async function getMoviesByDecade (startYear, startDate, endDate, page){
   try {
