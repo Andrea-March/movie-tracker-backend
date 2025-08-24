@@ -39,6 +39,11 @@ const MOVIES_POPULARITY_THRESHOLD = 0.5;
   }
 }); */
 
+
+/**
+ * @route GET /api/movies/search
+ * @description Ritorna i film che matchano la query
+ */
 router.get("/search", authMiddleware, async (req, res) => {
   const { query } = req.query;
 
@@ -75,6 +80,10 @@ router.get("/search", authMiddleware, async (req, res) => {
   }
 });
 
+/**
+ * @route GET /api/movies/search/multi
+ * @description Ritorna i film e le persone che matchano la query
+ */
 router.get("/search/multi", authMiddleware, async (req, res) => {
   const { query } = req.query;
 
@@ -136,11 +145,28 @@ router.get("/search/multi", authMiddleware, async (req, res) => {
   }
 });
 
+
+/**
+ * @route GET /api/movies/detail/:movieId
+ * @description Ritorna i dettagli del film corrispondente all'id
+ * @param {String} movieId - ID del film
+ * @cache {duration: 6h}
+ */
 router.get("/detail/:movieId", authMiddleware, async (req, res) => {
   const {movieId} = req.params;
+  try{
+    const cachedData = await getData(`movie_detail_${movieId}`)
+    if (cachedData) {
+      // Se i dati sono in cache, rispondi con i dati memorizzati
+      return res.json(JSON.parse(cachedData));
+    }
+  }catch(err) {
+    console.log(err)
+  }
  
   try {
      let movieDetail = await getMovieById(movieId);
+     cacheData(`movie_detail_${movieId}`, JSON.stringify({trailer_url:`${trailer_url}`}))
     res.json(movieDetail); // Restituisce il film trovato
   } catch (err) {
     console.error("Errore durante la ricerca OMDb:", err);
@@ -148,6 +174,12 @@ router.get("/detail/:movieId", authMiddleware, async (req, res) => {
   }
 });
 
+
+/**
+ * @route GET /api/movies/popular
+ * @description Ritorna i film popolari
+ * @cache {duration: 6h}
+ */
 router.get('/popular', authMiddleware, async (req, res) => {
   const page = parseInt(req.query.page) || 1;
 
@@ -190,6 +222,12 @@ router.get('/popular', authMiddleware, async (req, res) => {
   }
 });
 
+
+/**
+ * @route GET /api/movies/top-rated
+ * @description Ritorna i film con i voti più alti di sempre
+ * @cache {duration: 6h}
+ */
 router.get('/top_rated', authMiddleware, async (req, res) => {
   const page = parseInt(req.query.page) || 1;
 
@@ -232,6 +270,12 @@ router.get('/top_rated', authMiddleware, async (req, res) => {
   }
 });
 
+
+/**
+ * @route GET /api/movies/upcoming
+ * @description Ritorna i film in uscita
+ * @cache {duration: 6h}
+ */
 router.get('/upcoming', authMiddleware, async (req, res) => {
   const page = parseInt(req.query.page) || 1;
 
@@ -275,7 +319,11 @@ router.get('/upcoming', authMiddleware, async (req, res) => {
 });
 
 
-// Endpoint per ottenere i film per decennio con paginazione e caching
+/**
+ * @route GET /api/movies/movies-by-decade
+ * @description Ritorna i film per il decennio indicato nel payload (paginati)
+ * @cache {duration: 6h}
+ */
 router.get("/movies-by-decade", authMiddleware, async (req, res) => {
   const { decade, page = 1 } = req.query; // Decennio e pagina (default 1)
 
@@ -312,6 +360,12 @@ router.get("/movies-by-decade", authMiddleware, async (req, res) => {
 });
 
 
+/**
+ * @route GET /api/movies/providers/:movieId
+ * @description Ritorna i provider sui quali è possibile vedere il film che ha un certo id
+ * @param {String} movieId - ID del film
+ * @cache {duration: 6h}
+ */
 router.get('/providers/:movieId', async (req, res) => {
   const {movieId} = req.params;
 
@@ -348,6 +402,13 @@ router.get('/providers/:movieId', async (req, res) => {
   }
 });
 
+
+/**
+ * @route GET /api/movies/:movieId/trailer
+ * @description Ritorna il link youtube al trailer del film di un dato id.
+ * @param {String} movieId - ID del film
+ * @cache {duration: 6h}
+ */
 router.get("/:movieId/trailer", authMiddleware, async (req, res) => {
   const {movieId} = req.params;
   try{
@@ -374,6 +435,13 @@ router.get("/:movieId/trailer", authMiddleware, async (req, res) => {
   }
 });
 
+
+/**
+ * @route GET /api/movies/:movieId/credits
+ * @description Ritorna le persone che hanno partecipato alla realizzazione del film
+ * @param {String} movieId - ID del film
+ * @cache {duration: 6h}
+ */
 router.get("/:movieId/credits", authMiddleware, async (req, res) => {
   const {movieId} = req.params;
   try{
@@ -409,6 +477,13 @@ router.get("/:movieId/credits", authMiddleware, async (req, res) => {
   }
 });
 
+
+/**
+ * @route GET /api/movies/:movieId/related
+ * @description Ritorna i film correlati ad un dato film
+ * @param {String} movieId - ID del film
+ * @cache {duration: 6h}
+ */
 router.get('/:movieId/related', authMiddleware, async (req, res) => {
   const movieId = req.params.movieId;
   const page = parseInt(req.query.page) || 1;

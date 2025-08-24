@@ -11,6 +11,10 @@ const TMDB_PEOPLE_API= "https://api.themoviedb.org/3/person/"
 
 const router = express.Router();
 
+/**
+ * @route GET /api/person/search
+ * @description Ritorna i match con la query fra le persone
+ */
 router.get("/search", async (req, res) => {
   const { query } = req.query;
 
@@ -48,14 +52,32 @@ router.get("/search", async (req, res) => {
 });
 
 
+/**
+ * @route GET /api/person/movies/:personId/:personRole
+ * @description Ritorna i film che ha diretto o in cui ha partecipato una persona
+ * @param {String} personId - ID della persona
+ * @param {Number} personRole - 'Director' || 'Crew'
+ * @cache {duration: 6h}
+ */
 router.get("/movies/:personId/:personRole", authMiddleware, async (req, res) => {
   const { personId, personRole } = req.params;
+
+  try{
+    const cachedData = await getData(`person_movies_${personId}_${personRole}`)
+    if (cachedData) {
+      // Se i dati sono in cache, rispondi con i dati memorizzati
+      return res.json(JSON.parse(cachedData));
+    }
+  }catch(err) {
+    console.log(err)
+  }
 
   try {
      const [personDetail, credits] = await Promise.all([
       getPersonById(personId),
       getPersonMovieCredits(personId, personRole),
     ]);
+    cacheData(`person_movies_${personId}_${personRole}`, JSON.stringify({personDetail, credits}))
     res.json({personDetail, credits});
   } catch (err) {
     console.error("Errore durante la ricerca dei film della persona:", err);
