@@ -2,6 +2,7 @@ const axios = require("axios");
 const express = require("express");
 const {cacheData, getData, quickCacheData} = require ("../utils/redisclient");
 const { Error } = require("mongoose");
+const { authMiddleware } = require("./authroutes");
 
 const TMDB_ACCESS_TOKEN = process.env.TMDB_ACCESS_TOKEN; // Inserisci la tua API key OMDb
 const TMDB_SEARCH_PERSON_API = "https://api.themoviedb.org/3/search/person/"
@@ -46,5 +47,76 @@ router.get("/search", async (req, res) => {
   }
 });
 
+
+router.get("/movies/:personId/:personRole", authMiddleware, async (req, res) => {
+  const { personId, personRole } = req.params;
+
+  try {
+     const [personDetail, credits] = await Promise.all([
+      getPersonById(personId),
+      getPersonMovieCredits(personId, personRole),
+    ]);
+    res.json({personDetail, credits});
+  } catch (err) {
+    console.error("Errore durante la ricerca dei film della persona:", err);
+    res.status(500).json({ error: "Errore durante la ricerca dei film della persona" });
+  }
+});
+
+
+async function getPersonMovieCredits(personId, personRole) {
+  try {
+    const response = await axios.get(`https://api.themoviedb.org/3/person/${personId}/movie_credits`, {
+      headers: {
+        Authorization: `Bearer ${TMDB_ACCESS_TOKEN}`,
+      },
+      params: {
+        language: "it-IT",
+      },
+    });
+
+    if (response.status !== 200) {
+      throw new Error("Errore nella risposta TMDb");
+    }
+
+    const data = response.data;
+
+    // Separiamo cast e crew
+    const movies = personRole === "Director" ? (data.crew || []).filter(c => c.job === "Director") : data.cast || []
+
+    const sorted = (movies || [])
+      .sort((a, b) => b.popularity - a.popularity)
+      .slice(0, 30);
+
+    return movies;
+  } catch (err) {
+    console.error("Errore durante la chiamata TMDb:", err);
+    throw new Error("Errore durante il recupero dei film della persona");
+  }
+}
+
+async function getPersonById(personId) {
+  try {
+    const response = await axios.get(
+      `https://api.themoviedb.org/3/person/${personId}`,
+      {
+        headers: {
+          Authorization: `Bearer ${TMDB_ACCESS_TOKEN}`,
+        },
+        params: {
+          /* language: "it-IT",  */ /* altrimenti non ritorna la biografia */
+        },
+      }
+    );
+
+    if (response.status !== 200) {
+      throw new Error(`Errore TMDb: status ${response.status}`);
+    }
+    return response.data; // contiene i dettagli della persona
+  } catch (err) {
+    console.error("Errore durante getPersonById:", err.message);
+    throw new Error("Errore durante la ricerca della persona");
+  }
+}
 
 module.exports = router;

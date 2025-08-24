@@ -9,6 +9,8 @@ const { authMiddleware } = require("./authroutes");
 const TMDB_ACCESS_TOKEN = process.env.TMDB_ACCESS_TOKEN; // Inserisci la tua API key OMDb
 const TMDB_MOVIE_API= "https://api.themoviedb.org/3/movie/";
 const TMDB_MOVIE_DISCOVER_API = "https://api.themoviedb.org/3/discover/movie";
+const PERSONS_POPULARITY_THRESHOLD = 0.2;
+const MOVIES_POPULARITY_THRESHOLD = 0.5;
 // Cerca un film tramite OMDb API
 /* router.get("/search", async (req, res) => {
   const { query } = req.query;
@@ -67,6 +69,67 @@ router.get("/search", authMiddleware, async (req, res) => {
     const limitedResults = response.data.results.slice(0, 5);
     /* await quickCacheData(`search_${query}`, JSON.stringify(limitedResults)); */
     res.json(limitedResults); // Restituisce la lista di film trovati
+  } catch (err) {
+    console.error("Errore durante la ricerca OMDb:", err);
+    res.status(500).json({ error: "Errore durante la ricerca dei film" });
+  }
+});
+
+router.get("/search/multi", authMiddleware, async (req, res) => {
+  const { query } = req.query;
+
+  if (!query) {
+    return res.status(400).json({ error: "Il parametro query è obbligatorio" });
+  }
+  /* try{
+    const cachedData = await getData(`search_${query}`);
+    if(cacheData) return response.status(200).json(JSON.parse(cachedData));
+  }catch(err) {
+    console.log("unable to access cache:" + err.message)
+  } */
+  try {
+    // Chiamata a OMDb API per cercare i film
+    const [moviesResp, personsResp] = await Promise.all([
+      axios.get("https://api.themoviedb.org/3/search/movie", {
+        headers:{
+          Authorization: `Bearer ${TMDB_ACCESS_TOKEN}`
+        },
+        params: {
+          language: "it-IT",
+          query, 
+        },
+      }),
+      axios.get("https://api.themoviedb.org/3/search/person", {
+        headers:{
+          Authorization: `Bearer ${TMDB_ACCESS_TOKEN}`
+        },
+        params: {
+          query,
+          language: "en-US",
+        },
+      }),
+    ]);
+    if (moviesResp.status !== 200 || personsResp.status !== 200) {
+      return res.status(404).json({ error: response.data.Error }); // Error handling
+    }
+    let movies = moviesResp.data.results
+      .filter(item => item.popularity && item.popularity >= MOVIES_POPULARITY_THRESHOLD)
+      .slice(0,3)
+      .map(r => ({
+        ...r,
+        media_type: "movie",
+      }));
+    let persons = personsResp.data.results
+      .filter(item => item.popularity && item.popularity >= PERSONS_POPULARITY_THRESHOLD)
+      .slice(0, 3)
+      .sort((a, b) => b.popularity - a.popularity)
+      .map(r => ({
+        ...r,
+        media_type: "person",
+      }));
+    let results = [...movies, ...persons].sort((a, b) => b.popularity - a.popularity);
+    /* await quickCacheData(`search_${query}`, JSON.stringify(limitedResults)); */
+    res.json(results); // Restituisce la lista di film trovati
   } catch (err) {
     console.error("Errore durante la ricerca OMDb:", err);
     res.status(500).json({ error: "Errore durante la ricerca dei film" });
@@ -398,6 +461,7 @@ router.get('/:movieId/related', authMiddleware, async (req, res) => {
     res.status(500).json({ error: "Errore durante la ricerca dei film correlati" });
   }
 });
+
  
 async function getMoviesByDecade (startYear, startDate, endDate, page){
   try {
@@ -483,6 +547,7 @@ async function getMovieById(movieId){
     throw new Error("Errore durante la ricerca del film: getMovieById")
   }
 }
+
 module.exports = router;
 module.exports.getMoviesByDecade = getMoviesByDecade;
 module.exports.getMovieTrailer = getMovieTrailer;
