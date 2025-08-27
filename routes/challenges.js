@@ -43,7 +43,7 @@ router.post("/", async (req, res) => {
       const data = await getMoviesByDecade(startYear, decadeStartDate, decadeEndDate, page)
 
       for (const movie of data.movies) {
-        const existingMovie = await Movie.findOne({ id: movie.id });
+        const existingMovie = await Movie.findOne({ tmdbId: movie.id });
 
         let movieId;
 
@@ -56,7 +56,7 @@ router.post("/", async (req, res) => {
             }
           // Creare un nuovo film
           const newMovie = new Movie({
-            id: movie.id,
+            tmdbId: movie.id,
             title: movie.title,
             overview: movie.overview,
             poster_path:"https://image.tmdb.org/t/p/original" + movie.poster_path,

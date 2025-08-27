@@ -522,7 +522,8 @@ router.get('/:movieId/related', authMiddleware, async (req, res) => {
     }
 
     const responseObject = {
-      movies: response.data.results.slice(0, limit),
+      movies: response.data.results
+        .slice(0, limit),
       totalPages: response.data.total_pages,
       currentPage: page,
     };

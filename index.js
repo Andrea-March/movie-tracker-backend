@@ -30,6 +30,7 @@ const userRoutes = require("./routes/users");
 const movieRoutes = require("./routes/movies");
 const challengesRoutes = require("./routes/challenges")
 const personRoutes = require("./routes/people");
+const groupRoutes = require("./routes/groups");
 const { router, authMiddleware } = require("./routes/authroutes")
 
 app.use("/api/users", userRoutes);
@@ -37,3 +38,4 @@ app.use("/api/movies", movieRoutes);
 app.use("/api/auth", router, authMiddleware); // Le route di login e registrazione
 app.use("/api/challenges", challengesRoutes);
 app.use("/api/person", personRoutes);
+app.use("/api/groups", groupRoutes);
