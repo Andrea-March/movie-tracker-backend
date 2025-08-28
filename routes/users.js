@@ -62,7 +62,6 @@ router.post('/fcm-token', async (req, res) => {
 router.post("/:userId/movies", authMiddleware, async (req, res) => {
   const { userId } = req.params;
   const { movie, watched } = req.body;
-
   try {
     // Invalida la cache
     /* if(watched){

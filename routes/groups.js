@@ -226,184 +226,74 @@ router.post("/", authMiddleware, async (req, res) => {
 
 
 router.get("/:id", authMiddleware, async (req, res) => {
-  const { id } = req.params;
-  if (!mongoose.isValidObjectId(id)) return res.status(400).json({ error: "Group id non valido" });
-
-  const userId = new mongoose.Types.ObjectId(req.userId);
-  const groupId = new mongoose.Types.ObjectId(id);
-
-  const include = new Set(String(req.query.include || "").split(",").filter(Boolean));
-  const membersLimit = Math.min(parseInt(req.query.membersLimit || "20", 10), 100);
-  const watchlistLimit = Math.min(parseInt(req.query.watchlistLimit || "20", 10), 100);
-  const watchlistSkip = Math.max(parseInt(req.query.watchlistSkip || "0", 10), 0);
-
-      const base = [
-      { $match: { _id: groupId } },
-
-      // Autorizzazione: membro o owner
-      {
-        $lookup: {
-          from: "groupmembers",
-          let: { gid: "$_id", uid: userId },
-          pipeline: [
-            { $match: { $expr: { $and: [ { $eq: ["$group", "$$gid"] }, { $eq: ["$user", "$$uid"] } ] } } },
-            { $project: { role: 1, _id: 0 } }
-          ],
-          as: "me"
-        }
-      },
-      {
-        $set: {
-          // true se esiste una membership
-          __isMember: { $gt: [ { $size: "$me" }, 0 ] },
-          // true se sei l'owner nel documento del gruppo
-          __isOwner: { $eq: ["$owner", userId] },
-        }
-      },
-      {
-        // passa solo se membro o owner
-        $match: { $or: [ { __isMember: true }, { __isOwner: true } ] }
-      },
-      {
-        // calcola myRole: se owner, "owner", altrimenti ruolo dalla membership (o null)
-        $set: {
-          myRole: {
-            $cond: [
-              "$__isOwner",
-              "owner",
-              { $ifNull: [ { $first: "$me.role" }, null ] }
-            ]
-          }
-        }
-      },
-      // pulizia
-      { $unset: ["me", "__isMember", "__isOwner"] },
-    ];
-  const lookups = [];
-
-  // nextEvent solo se non lo hai già o vuoi riallinearli (facoltativo)
-  if (include.has("nextEvent")) {
-    lookups.push(
-      {
-        $lookup: {
-          from: "events",
-          let: { gid: "$_id", now: new Date() },
-          pipeline: [
-            { $match: { $expr: { $and: [ { $eq: ["$group", "$$gid"] }, { $eq: ["$status", "scheduled"] }, { $gte: ["$startsAt", "$$now"] } ] } } },
-            { $sort: { startsAt: 1 } },
-            { $limit: 1 },
-            { $project: { _id: 1, title: 1, startsAt: 1, location: 1 } }
-          ],
-          as: "nextEvent"
-        }
-      },
-      { $addFields: { nextEvent: { $first: "$nextEvent" } } }
-    );
-  }
-
-  if (include.has("members")) {
-    lookups.push(
-      {
-        $lookup: {
-          from: "groupmembers",
-          let: { gid: "$_id" },
-          pipeline: [
-            { $match: { $expr: { $eq: ["$group", "$$gid"] } } },
-            {
-              $addFields: {
-                roleOrder: {
-                  $switch: {
-                    branches: [
-                      { case: { $eq: ["$role", "owner"] }, then: 0 },
-                      { case: { $eq: ["$role", "admin"] }, then: 1 }
-                    ],
-                    default: 2
-                  }
-                }
-              }
-            },
-            { $sort: { roleOrder: 1, joinedAt: -1 } },
-            { $limit: membersLimit },
-            {
-              $lookup: { from: "users", localField: "user", foreignField: "_id", as: "u" }
-            },
-            { $unwind: "$u" },
-            { $project: { _id: 0, userId: "$u._id", name: "$u.name", avatar: "$u.avatar", role: 1, joinedAt: 1 } }
-          ],
-          as: "members"
-        }
-      }
-    );
-  }
-
-  if (include.has("watchlist")) {
-    lookups.push(
-      {
-        $lookup: {
-          from: "groupmovies",
-          let: { gid: "$_id" },
-          pipeline: [
-            { $match: { $expr: { $and: [ { $eq: ["$group", "$$gid"] }, { $eq: ["$status", "pending"] } ] } } },
-            { $sort: { addedAt: -1 } },
-            { $skip: watchlistSkip },
-            { $limit: watchlistLimit },
-            { $project: { 
-                _id: 1, addedAt: 1, addedBy: 1, status: 1,
-                snapshot: { tmdbId: 1, title: 1, year: 1, runtime: 1, poster: 1 }
-            } }
-          ],
-          as: "watchlist"
-        }
-      },
-      // conteggio totale separato nella stessa aggregazione
-      {
-        $lookup: {
-          from: "groupmovies",
-          let: { gid: "$__id" }, // non funziona: usare di nuovo $_id
-          pipeline: [
-            { $match: { $expr: { $and: [ { $eq: ["$group", groupId] }, { $eq: ["$status", "pending"] } ] } } },
-            { $count: "n" }
-          ],
-          as: "watchlistTotalAgg"
-        }
-      },
-      { $addFields: { watchlistTotal: { $ifNull: [ { $arrayElemAt: ["$watchlistTotalAgg.n", 0] }, 0 ] } } },
-      { $project: { watchlistTotalAgg: 0 } }
-    );
-  }
-
-  if (include.has("settings")) {
-    // Nessun lookup: sono nel documento Group
-  }
-
-  // Proiezione finale
-    const baseProject = {
-      _id: 1, name: 1, description: 1, icon: 1,
-      invitePolicy: 1, visibility: 1, settings: 1,
-      owner: 1, membersCount: 1, createdAt: 1, updatedAt: 1,
-      myRole: 1
-    };
-
-    const project = {
-      $project: {
-        ...baseProject,
-        ...(include.has("nextEvent") ? { nextEvent: 1 } : {}),
-        ...(include.has("members")   ? { members: 1 }   : {}),
-        ...(include.has("watchlist") ? { watchlist: 1, watchlistTotal: 1 } : {})
-      }
-    };
-
   try {
-    const pipeline = [...base, ...lookups, project];
-    const [doc] = await Group.aggregate(pipeline).exec();
-    if (!doc) return res.status(404).json({ error: "Gruppo non trovato o accesso negato" });
+    const { id } = req.params;
+    if (!mongoose.isValidObjectId(id)) return res.status(400).json({ error: "Group id non valido" });
 
-    // ETag/IMS facoltativo: usa updatedAt come validatore
-    const etag = `"${doc._id.toString()}-${new Date(doc.updatedAt).getTime()}"`;
-    res.set("ETag", etag);
+    const userId = req.userId;
 
-    if (req.headers["if-none-match"] === etag) {
-      return res.status(304).end();
+    // leggi gruppo
+    const group = await Group.findById(id)
+      .populate("owner", "username") // ← solo i campi che ti servono
+      .lean();
+    if (!group) return res.status(404).json({ error: "Gruppo non trovato" });
+
+    // check membership / owner
+    const isOwner = String(group.owner._id) === String(userId);
+    const membership = await GroupMember.findOne({ group: id, user: userId }).lean();
+    if (!isOwner && !membership) {
+      return res.status(403).json({ error: "Accesso negato" });
+    }
+    // base doc
+    const doc = {
+      _id: group._id,
+      name: group.name,
+      description: group.description,
+      icon: group.icon,
+      invitePolicy: group.invitePolicy,
+      visibility: group.visibility,
+      settings: group.settings,
+      owner: {
+        _id: group.owner._id,
+        username: group.owner.username
+      },
+      membersCount: group.membersCount,
+      createdAt: group.createdAt,
+      updatedAt: group.updatedAt,
+      myRole: isOwner ? "owner" : membership.role
+    };
+    // include dinamici
+    const include = new Set(String(req.query.include || "").split(",").filter(Boolean));
+
+    if (include.has("members")) {
+      doc.members = await GroupMember.find({ group: id })
+        .sort({ role: 1, joinedAt: -1 })
+        .limit(20)
+        .populate("user", "username avatar")
+        .lean()
+        .then(list => list.map(m => ({
+          userId: m.user._id,
+          name: m.user.name,
+          avatar: m.user.avatar,
+          role: m.role,
+          joinedAt: m.joinedAt
+        })));
+    }
+
+    if (include.has("watchlist")) {
+      doc.watchlist = await GroupMovie.find({ group: id, status: "pending" })
+        .sort({ addedAt: -1 })
+        .skip(parseInt(req.query.watchlistSkip || "0", 10))
+        .limit(parseInt(req.query.watchlistLimit || "20", 10))
+        .lean();
+      doc.watchlistTotal = await GroupMovie.countDocuments({ group: id, status: "pending" });
+    }
+
+    if (include.has("nextEvent")) {
+      doc.nextEvent = await Event.findOne({ group: id, status: "scheduled", startsAt: { $gte: new Date() } })
+        .sort({ startsAt: 1 })
+        .select("_id title startsAt location")
+        .lean();
     }
 
     res.json(doc);
@@ -412,6 +302,8 @@ router.get("/:id", authMiddleware, async (req, res) => {
     res.status(500).json({ error: "Errore dettaglio gruppo" });
   }
 });
+
+//FIN QUA OK
 
 
 router.post("/:id/watchlist", authMiddleware, async (req, res) => {
@@ -552,6 +444,7 @@ function mapTmdbToMovieDoc(m) {
 }
 
 
+
 /**
  * @route GET /api/groups/:groupId/movies
  * @desc Lista film del gruppo
@@ -667,9 +560,23 @@ router.get("/:groupId/events", authMiddleware, async (req, res) => {
 });
 
 
+
+
+//DA QUA OK
 router.post("/:groupId/invite", authMiddleware, async (req, res) => {
   const { groupId } = req.params;
-  const { maxUses, expiresAt } = req.body; // opzionale
+  let { maxUses = 50, expiresAt } = req.body;
+
+
+  if (!expiresAt) {
+    expiresAt = new Date(Date.now() + 0.5*24*60*60*1000);
+  } else {
+    expiresAt = new Date(expiresAt); // cast string -> Date
+  }
+
+  const maxExpiry = new Date(Date.now() + 30*24*60*60*1000);
+  if (isNaN(expiresAt.getTime())) return res.status(400).json({ error: "expiresAt non valida" });
+  if (expiresAt > maxExpiry) return res.status(400).json({ error: "Scadenza oltre 30 giorni" });
 
   try {
     const tokenString = crypto.randomBytes(16).toString("hex");
@@ -682,7 +589,7 @@ router.post("/:groupId/invite", authMiddleware, async (req, res) => {
     });
 
     res.status(201).json({
-      link: `${process.env.FRONTEND_URL}/join/${tokenString}`,
+      link: `${process.env.CLIENT_URL}/join/${tokenString}`,
       token: tokenString,
       maxUses: invite.maxUses,
       expiresAt: invite.expiresAt
@@ -694,32 +601,47 @@ router.post("/:groupId/invite", authMiddleware, async (req, res) => {
 });
 
 
-router.post("/invite/:token/join", authMiddleware, async (req, res) => {
-  const { token } = req.params;
-
+router.post("/join/:token", authMiddleware, async (req, res) => {
   try {
-    const invite = await InviteToken.findOne({ token }).populate("group");
+    // 1) Consuma il token
+    const invite = await InviteToken.consume(req.params.token);
 
-    if (!invite) return res.status(404).json({ error: "Token non valido" });
-    if (invite.revoked) return res.status(400).json({ error: "Token revocato" });
-    if (invite.expiresAt < new Date()) return res.status(400).json({ error: "Token scaduto" });
-    if (invite.usedCount >= invite.maxUses) return res.status(400).json({ error: "Token esaurito" });
+    // 2) Crea membership (idempotente grazie all’indice unique)
+    const member = await GroupMember.create({
+      group: invite.group,
+      user: req.userId,
+      role: "member",
+      joinedAt: new Date()
+    }).catch(err => {
+      if (err.code === 11000) {
+        throw new Error("Sei già nel gruppo");
+      }
+      throw err;
+    });
 
-    // Aggiungi l’utente al gruppo se non presente
-    if (!invite.group.members.includes(req.userId)) {
-      invite.group.members.push(req.userId);
-      await invite.group.save();
-    }
+    // 3) Aggiorna il contatore nel group
+    await Group.updateOne(
+      { _id: invite.group },
+      { $inc: { membersCount: 1 } }
+    );
 
-    // Incrementa usedCount
-    invite.usedCount += 1;
-    await invite.save();
-
-    res.json({ message: "Sei stato aggiunto al gruppo!", group: invite.group });
+    res.json({ ok: true, groupId: String(invite.group) });
   } catch (err) {
-    console.error("Errore join gruppo via token:", err.message);
-    res.status(500).json({ error: "Impossibile unirsi al gruppo" });
+    res.status(400).json({ error: err.message });
   }
+});
+
+router.delete("/invites/:token", authMiddleware, async (req, res) => {
+  const invite = await InviteToken.findOne({ token: req.params.token }).populate("group", "owners admins");
+  if (!invite) return res.status(404).json({ error: "Invito non trovato" });
+
+  const { group } = invite;
+  const canRevoke = group.owners?.includes(req.userId) || group.admins?.includes(req.userId);
+  if (!canRevoke) return res.status(403).json({ error: "Permesso negato" });
+
+  invite.revoked = true;
+  await invite.save();
+  res.status(200).json({ ok: true });
 });
 
 module.exports = router;

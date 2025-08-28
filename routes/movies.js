@@ -589,7 +589,23 @@ async function getMovieTrailer(movieId){
     if (response.status !== 200) {
       return null; // Error handling
     }
-    const videos = response.data.results;
+    let videos = response.data.results;
+    //TRY TO GET THE ENGLISH TRAILER
+    if(!videos || !videos.length){
+        const response = await axios.get(`${TMDB_MOVIE_API}${movieId}/videos`, {
+        headers: {
+          Authorization: `Bearer ${TMDB_ACCESS_TOKEN}`
+        },
+        params: {
+          movie_id: movieId,
+        },
+      });
+
+      if (response.status !== 200) {
+        return null; // Error handling
+      }
+      videos = response.data.results;
+    }
     const youTubeVideo = videos.find((el) => el["site"] === "YouTube");
     let youtubeUrl;
     if(youTubeVideo){

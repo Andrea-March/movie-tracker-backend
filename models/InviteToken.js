@@ -13,12 +13,16 @@ const inviteTokenSchema = new mongoose.Schema({
 // TTL auto-clean (rimuove doc quando expiresAt < now)
 inviteTokenSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 
-// Helper per consumare un invito in modo sicuro
-inviteTokenSchema.statics.consume = async function(token, session) {
+inviteTokenSchema.statics.consume = async function(token) {
   const doc = await this.findOneAndUpdate(
-    { token, revoked: false, expiresAt: { $gt: new Date() }, $expr: { $lt: ["$usedCount", "$maxUses"] } },
-    { $inc: { usedCount: 1 } },
-    { new: true, session }
+    {
+      token,
+      revoked: false,
+      expiresAt: { $gt: new Date() },
+      $expr: { $lt: ["$usedCount", "$maxUses"] }
+    },
+    { $inc: { usedCount: 1 }, $addToSet: { usedBy: /* opzionale */ undefined } },
+    { new: true }
   );
   if (!doc) throw new Error("Invite token invalid/expired/exhausted");
   return doc;

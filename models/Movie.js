@@ -5,7 +5,7 @@ const movieSchema = new mongoose.Schema({
   tmdbId: { type: Number },
 
   // legacy: il vecchio "id" (string) resta, ma lo chiamiamo legacyId
-  legacyId: { type: String, alias: "id" }, // alias mantiene compatibilità col codice che legge "id"
+  legacyId: { type: String }, // alias mantiene compatibilità col codice che legge "id"
 
   title: { type: String, required: true, trim: true },
   overview: { type: String },
