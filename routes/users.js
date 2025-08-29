@@ -90,8 +90,6 @@ router.post("/:userId/movies", authMiddleware, async (req, res) => {
       }
     }
     if (!foundMovie) {
-      let movieDetails = await getMovieById(movie.id);
-      let genres =movieDetails.genres.map(genre => genre.name);
       let trailerUrl = undefined;
       try{
         trailerUrl = await getMovieTrailer(movie.id);
@@ -106,8 +104,8 @@ router.post("/:userId/movies", authMiddleware, async (req, res) => {
         release_date: movie.release_date,
         trailer_url: trailerUrl,
         genre_ids: movie.genre_ids,
-        genres: genres,
-        runtime: movieDetails.runtime,
+        genres: movie.genres,
+        runtime: movie.runtime,
         vote_average: movie.vote_average,
       });
       await foundMovie.save();

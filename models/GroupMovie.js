@@ -5,7 +5,7 @@ const groupMovieSchema = new mongoose.Schema({
   movie:   { type: mongoose.Schema.Types.ObjectId, ref: "Movie", required: true, index: true },
   addedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User",  required: true },
   addedAt: { type: Date, default: Date.now },
-  status:  { type: String, enum: ["pending","watched","archived"], default: "pending", index: true },
+  status:  { type: String, enum: ["to-watch","watched","archived"], default: "to-watch", index: true },
   notes:   { type: String },
   snapshot: {
     tmdbId: Number,

@@ -10,6 +10,7 @@ const GroupMember = require("../models/GroupMember")
 const Poll = require("../models/Poll");
 const Vote = require("../models/Vote");
 const Event = require("../models/Event");
+const Movie = require("../models/Movie")
 
 const router = express.Router();
 
@@ -162,6 +163,41 @@ router.get("/", authMiddleware, async (req, res) => {
   }
 });
 
+// versione semplificata per la dropdown "aggiungi un film ad un gruppo"
+router.get("/dropdown", authMiddleware, async (req, res) => {
+  const userId = new mongoose.Types.ObjectId(req.userId);
+
+  try {
+    const memberships = await GroupMember.aggregate([
+      { $match: { user: userId } },
+      {
+        $lookup: {
+          from: "groups",
+          localField: "group",
+          foreignField: "_id",
+          as: "group"
+        }
+      },
+      { $unwind: "$group" },
+      { $sort: { "group.name": 1 } }, // ordina alfabetico
+      {
+        $project: {
+          _id: 0,
+          groupId: "$group._id",
+          name: "$group.name",
+          icon: "$group.icon"
+        }
+      }
+    ]).exec();
+
+    res.json(memberships);
+  } catch (err) {
+    console.error("Errore fetching gruppi (dropdown):", err);
+    res.status(500).json({ error: "Errore fetching gruppi" });
+  }
+});
+
+
 /**
  * @route POST /api/groups
  * @desc Crea un nuovo gruppo
@@ -281,12 +317,12 @@ router.get("/:id", authMiddleware, async (req, res) => {
     }
 
     if (include.has("watchlist")) {
-      doc.watchlist = await GroupMovie.find({ group: id, status: "pending" })
+      doc.watchlist = await GroupMovie.find({ group: id, status: "to-watch" })
         .sort({ addedAt: -1 })
         .skip(parseInt(req.query.watchlistSkip || "0", 10))
         .limit(parseInt(req.query.watchlistLimit || "20", 10))
         .lean();
-      doc.watchlistTotal = await GroupMovie.countDocuments({ group: id, status: "pending" });
+      doc.watchlistTotal = await GroupMovie.countDocuments({ group: id, status: "to-watch" });
     }
 
     if (include.has("nextEvent")) {
@@ -316,24 +352,14 @@ router.post("/:id/watchlist", authMiddleware, async (req, res) => {
   // Dati opzionali dal client (se la UI li ha già)
   const {
     tmdbId, title, overview, poster_path, release_date,
-    runtime, vote_average, genres, genre_ids, notes
-  } = req.body;
+    runtime, vote_average, genres, genre_ids, trailer_url
+  } = req.body.movie;
 
   if (!Number.isInteger(tmdbId) || tmdbId <= 0) {
     return res.status(400).json({ error: "tmdbId non valido" });
   }
 
-  const existing = await GroupMovie.findOne({ group: groupId, movie: tmdbId })
-    .select('_id')
-    .lean();
 
-  if (existing) {
-    return res.status(409).json({
-      code: 'ALREADY_EXISTS',
-      message: 'Movie già presente nel gruppo',
-      groupMovieId: existing._id,
-    });
-  }
 
   const session = await mongoose.startSession();
   session.startTransaction();
@@ -344,7 +370,7 @@ router.post("/:id/watchlist", authMiddleware, async (req, res) => {
     if (!membership) throw new Error("Accesso negato: non sei membro del gruppo");
 
     // 2) Prova a trovare Movie
-    let movie = await Movie.findOne({ $or: [ { tmdbId }, { legacyId: String(tmdbId) } ] }).session(session);
+    let movie = await Movie.findOne({ $or: [ { tmdbId }, { legacyId: Number(tmdbId) } ] }).session(session);
 
     // 3) Se non esiste e NON ho metadati dal client → fetch TMDB
     let data = null;
@@ -366,7 +392,8 @@ router.post("/:id/watchlist", authMiddleware, async (req, res) => {
         runtime,
         vote_average,
         genres,
-        genre_ids
+        genre_ids,
+        trailer_url
       } : mapTmdbToMovieDoc(data);
 
       movie = await Movie.findOneAndUpdate(
@@ -382,7 +409,7 @@ router.post("/:id/watchlist", authMiddleware, async (req, res) => {
       title: movie.title,
       year: movie.releaseYear ?? (movie.release_date ? movie.release_date.getUTCFullYear() : undefined),
       runtime: movie.runtime,
-      poster: movie.poster_path ? `https://image.tmdb.org/t/p/w500${movie.poster_path}` : undefined
+      poster: movie.poster_path ? movie.poster_path : undefined
     };
 
     let item;
@@ -391,8 +418,7 @@ router.post("/:id/watchlist", authMiddleware, async (req, res) => {
         group: groupId,
         movie: movie._id,
         addedBy: userId,
-        status: "pending",
-        notes: notes?.trim(),
+        status: "to-watch",
         snapshot
       }], { session }).then(r => r[0]);
     } catch (e) {
@@ -411,7 +437,6 @@ router.post("/:id/watchlist", authMiddleware, async (req, res) => {
       addedBy: item.addedBy,
       addedAt: item.addedAt,
       status: item.status,
-      notes: item.notes,
       snapshot: item.snapshot
     });
   } catch (err) {
