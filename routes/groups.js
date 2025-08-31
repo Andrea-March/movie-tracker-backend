@@ -10,7 +10,8 @@ const GroupMember = require("../models/GroupMember")
 const Poll = require("../models/Poll");
 const Vote = require("../models/Vote");
 const Event = require("../models/Event");
-const Movie = require("../models/Movie")
+const Movie = require("../models/Movie");
+const { getMovieById, getMovieTrailer } = require("./movies");
 
 const router = express.Router();
 
@@ -352,13 +353,14 @@ router.post("/:id/watchlist", authMiddleware, async (req, res) => {
   // Dati opzionali dal client (se la UI li ha già)
   const {
     tmdbId, title, overview, poster_path, release_date,
-    runtime, vote_average, genres, genre_ids, trailer_url
+    runtime, vote_average, genres, genre_ids
   } = req.body.movie;
+  const trailer_url = req.body.movie.trailerUrl;
 
   if (!Number.isInteger(tmdbId) || tmdbId <= 0) {
     return res.status(400).json({ error: "tmdbId non valido" });
   }
-
+  console.log(trailer_url)
 
 
   const session = await mongoose.startSession();
@@ -374,9 +376,12 @@ router.post("/:id/watchlist", authMiddleware, async (req, res) => {
 
     // 3) Se non esiste e NON ho metadati dal client → fetch TMDB
     let data = null;
-    if (!movie && !title) {
-      data = await tmdb.getMovie(tmdbId); // usa la tua service con cache Redis
+    if (!movie) {
+      let data = await getMovieById(tmdbId); 
       if (!data) throw new Error("Film TMDB non trovato");
+      data.trailer_url = trailer_url;
+      data.genres = genres
+      data.poster_path = "https://image.tmdb.org/t/p/original" + poster_path
     }
 
     // 4) Se non esiste → upsert con ciò che ho (client o TMDB)
@@ -386,7 +391,7 @@ router.post("/:id/watchlist", authMiddleware, async (req, res) => {
         legacyId: String(tmdbId),
         title,
         overview,
-        poster_path,
+        poster_path: "https://image.tmdb.org/t/p/original" + poster_path,
         release_date: release_date ? new Date(release_date) : undefined,
         releaseYear: release_date ? new Date(release_date).getUTCFullYear() : undefined,
         runtime,
@@ -402,14 +407,16 @@ router.post("/:id/watchlist", authMiddleware, async (req, res) => {
         { upsert: true, new: true, session }
       );
     }
-
     // 5) Crea GroupMovie (idempotente via unique index {group,movie})
     const snapshot = {
       tmdbId: movie.tmdbId ?? Number(movie.legacyId),
       title: movie.title,
       year: movie.releaseYear ?? (movie.release_date ? movie.release_date.getUTCFullYear() : undefined),
       runtime: movie.runtime,
-      poster: movie.poster_path ? movie.poster_path : undefined
+      poster: movie.poster_path ? movie.poster_path : undefined,
+      trailer_url: movie.trailer_url || undefined,
+      genres: movie.genres,
+      vote_average: movie.vote_average,
     };
 
     let item;
@@ -422,8 +429,9 @@ router.post("/:id/watchlist", authMiddleware, async (req, res) => {
         snapshot
       }], { session }).then(r => r[0]);
     } catch (e) {
+      console.log(e.message)
       if (e?.code === 11000) {
-        item = await GroupMovie.findOne({ group: groupId, movie: movie._id }).session(session);
+        return res.status(400).json({error: "Film già aggiunto al gruppo"})
       } else throw e;
     }
 
@@ -464,7 +472,8 @@ function mapTmdbToMovieDoc(m) {
     vote_average: m.vote_average,
     // se vuoi: genres come nomi
     genres: Array.isArray(m.genres) ? m.genres.map(g => g.name) : undefined,
-    genre_ids: Array.isArray(m.genres) ? m.genres.map(g => g.id) : undefined
+    genre_ids: Array.isArray(m.genres) ? m.genres.map(g => g.id) : undefined,
+    trailer_url: m.trailer_url ? m.trailer_url : undefined
   };
 }
 

@@ -12,7 +12,10 @@ const groupMovieSchema = new mongoose.Schema({
     title: String,
     year: Number,
     runtime: Number,
-    poster: String // URL pieno o path TMDB, come preferisci
+    poster: String,
+    genres: [String],
+    vote_average: Number,
+    trailer_url: String,
   }
 }, { timestamps: true });
 
