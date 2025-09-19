@@ -365,7 +365,6 @@ router.post("/:id/watchlist", authMiddleware, async (req, res) => {
   if (!Number.isInteger(tmdbId) || tmdbId <= 0) {
     return res.status(400).json({ error: "tmdbId non valido" });
   }
-  console.log(trailer_url)
 
 
   const session = await mongoose.startSession();
