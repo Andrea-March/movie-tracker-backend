@@ -327,9 +327,14 @@ router.get("/:id", authMiddleware, async (req, res) => {
     }
 
     if (include.has("nextEvent")) {
-      doc.nextEvent = await Event.findOne({ group: id, status: "scheduled", startsAt: { $gte: new Date() } })
+      doc.nextEvent = await Event.findOne({
+        group: id,
+        status: "scheduled",
+        startsAt: { $gte: new Date() }
+      })
         .sort({ startsAt: 1 })
-        .select("_id title startsAt location")
+        .select("_id title startsAt location movie")
+        .populate("movie", "poster_path title") // aggiunge poster e titolo del film
         .lean();
     }
 
@@ -601,28 +606,44 @@ router.post("/:groupId/invite", authMiddleware, async (req, res) => {
   const { groupId } = req.params;
   let { maxUses = 50, expiresAt } = req.body;
 
-
   if (!expiresAt) {
-    expiresAt = new Date(Date.now() + 0.5*24*60*60*1000);
+    expiresAt = new Date(Date.now() + 0.5 * 24 * 60 * 60 * 1000);
   } else {
-    expiresAt = new Date(expiresAt); // cast string -> Date
+    expiresAt = new Date(expiresAt);
   }
 
-  const maxExpiry = new Date(Date.now() + 30*24*60*60*1000);
+  const maxExpiry = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
   if (isNaN(expiresAt.getTime())) return res.status(400).json({ error: "expiresAt non valida" });
   if (expiresAt > maxExpiry) return res.status(400).json({ error: "Scadenza oltre 30 giorni" });
 
   try {
+    // 🔹 cerca se esiste già un token valido
+    const existing = await InviteToken.findOne({
+      group: groupId,
+      expiresAt: { $gt: new Date() },                 // non scaduto
+      $expr: { $lt: ["$usedCount", "$maxUses"] }      // non esaurito
+    }).sort({ createdAt: -1 });
+
+    if (existing) {
+      return res.json({
+        link: `${process.env.CLIENT_URL}/join/${existing.token}`,
+        token: existing.token,
+        maxUses: existing.maxUses,
+        expiresAt: existing.expiresAt
+      });
+    }
+
+    // 🔹 altrimenti, genera nuovo token
     const tokenString = crypto.randomBytes(16).toString("hex");
     const invite = await InviteToken.create({
       group: groupId,
       token: tokenString,
       createdBy: req.userId,
-      expiresAt: expiresAt || new Date(+new Date() + 7*24*60*60*1000),
-      maxUses: maxUses || 1
+      expiresAt,
+      maxUses
     });
 
-    res.status(201).json({
+    return res.status(201).json({
       link: `${process.env.CLIENT_URL}/join/${tokenString}`,
       token: tokenString,
       maxUses: invite.maxUses,
@@ -633,7 +654,6 @@ router.post("/:groupId/invite", authMiddleware, async (req, res) => {
     res.status(500).json({ error: "Errore generazione invito" });
   }
 });
-
 
 router.post("/join/:token", authMiddleware, async (req, res) => {
   try {
