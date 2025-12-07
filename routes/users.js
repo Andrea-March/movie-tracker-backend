@@ -62,7 +62,6 @@ router.post('/fcm-token', async (req, res) => {
 router.post("/:userId/movies", authMiddleware, async (req, res) => {
   const { userId } = req.params;
   const { movie, watched } = req.body;
-
   try {
     // Invalida la cache
     /* if(watched){
@@ -80,20 +79,17 @@ router.post("/:userId/movies", authMiddleware, async (req, res) => {
   try {
     const user = await User.findById(userId);
     // Cerca o crea il film nella collezione Movies
-    let foundMovie = await Movie.findOne({ id: movie.id });
+    let foundMovie = await Movie.findOne({ tmdbId: movie.id });
     if (foundMovie) {
       const userHasMovie = await User.exists({ 
         _id: userId, 
         "movies.movieId": foundMovie._id 
       });
-    
       if (userHasMovie) {
         return res.status(400).json({ error: "Film già salvato!" });
       }
     }
     if (!foundMovie) {
-      let movieDetails = await getMovieById(movie.id);
-      let genres =movieDetails.genres.map(genre => genre.name);
       let trailerUrl = undefined;
       try{
         trailerUrl = await getMovieTrailer(movie.id);
@@ -102,14 +98,14 @@ router.post("/:userId/movies", authMiddleware, async (req, res) => {
       }
       foundMovie = new Movie({
         title: movie.title,
-        id: movie.id,
+        tmdbId: movie.id,
         overview: movie.overview,
         poster_path: "https://image.tmdb.org/t/p/original" + movie.poster_path,
         release_date: movie.release_date,
         trailer_url: trailerUrl,
         genre_ids: movie.genre_ids,
-        genres: genres,
-        runtime: movieDetails.runtime,
+        genres: movie.genres,
+        runtime: movie.runtime,
         vote_average: movie.vote_average,
       });
       await foundMovie.save();

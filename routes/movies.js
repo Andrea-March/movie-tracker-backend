@@ -435,6 +435,35 @@ router.get("/:movieId/trailer", authMiddleware, async (req, res) => {
   }
 });
 
+router.get("/:movieId/genres-runtime", authMiddleware, async (req, res) => {
+  const {movieId} = req.params;
+  try{
+    const cachedData = await getData(`genres_runtime_${movieId}`)
+    if (cachedData) {
+      // Se i dati sono in cache, rispondi con i dati memorizzati
+      return res.json(JSON.parse(cachedData));
+    }
+  }catch(err) {
+    console.log(err)
+  }
+
+  try {
+    // Chiamata a OMDb API per cercare i film
+    const movieDetails = await getMovieById(movieId)
+    if (!movieDetails) {
+      return res.status(404).json({ error: `movie not found for tmdbId: ${movieId}` }); 
+    }
+    const genres = movieDetails.genres.map(genre => genre.name);
+    const runtime = movieDetails.runtime;
+
+    cacheData(`genres_runtime_${movieId}`, JSON.stringify({genres:`${genres}`, runtime: `${runtime}`}))
+    res.status(200).json({genres, runtime});
+  } catch (err) {
+    console.error("Errore durante la ricerca OMDb:", err);
+    res.status(500).json({ error: "Errore durante la ricerca dei film" });
+  }
+});
+
 
 /**
  * @route GET /api/movies/:movieId/credits
@@ -522,7 +551,8 @@ router.get('/:movieId/related', authMiddleware, async (req, res) => {
     }
 
     const responseObject = {
-      movies: response.data.results.slice(0, limit),
+      movies: response.data.results
+        .slice(0, limit),
       totalPages: response.data.total_pages,
       currentPage: page,
     };
@@ -588,7 +618,23 @@ async function getMovieTrailer(movieId){
     if (response.status !== 200) {
       return null; // Error handling
     }
-    const videos = response.data.results;
+    let videos = response.data.results;
+    //TRY TO GET THE ENGLISH TRAILER
+    if(!videos || !videos.length){
+        const response = await axios.get(`${TMDB_MOVIE_API}${movieId}/videos`, {
+        headers: {
+          Authorization: `Bearer ${TMDB_ACCESS_TOKEN}`
+        },
+        params: {
+          movie_id: movieId,
+        },
+      });
+
+      if (response.status !== 200) {
+        return null; // Error handling
+      }
+      videos = response.data.results;
+    }
     const youTubeVideo = videos.find((el) => el["site"] === "YouTube");
     let youtubeUrl;
     if(youTubeVideo){

@@ -1,5 +1,7 @@
 const Redis = require("ioredis");
 
+let retries = 0;
+const MAX_RETRIES = 5;
 // Configura il client Redis con il tuo endpoint pubblico
 const redis = new Redis({
     host: process.env.REDIS_URL,
@@ -7,6 +9,8 @@ const redis = new Redis({
     password: process.env.REDIS_PASSWORD,
     tls: false, // Abilita TLS per endpoint pubblici
     retryStrategy(times) { // Riprova dopo un tempo esponenziale
+      if(retries > MAX_RETRIES) return
+      retries = retries + 1
       const delay = Math.min(times * 50, 2000);
       console.log(`Riconnessione a Redis in ${delay}ms...`);
       return delay;
