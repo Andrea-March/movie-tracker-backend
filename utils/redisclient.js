@@ -33,7 +33,7 @@ const redis = new Redis({
      /*  console.log(`Dato memorizzato nella cache con chiave: ${key}`); */
     } catch (err) {
       console.error("Errore durante il caching:", err);
-      throw new Error(err);
+      /* throw new Error(err); */
     }
   }
 
@@ -43,7 +43,7 @@ const redis = new Redis({
       /* console.log(`Dato memorizzato nella cache con chiave: ${key}`); */
     } catch (err) {
       console.error("Errore durante il caching:", err);
-      throw new Error(err);
+      /* throw new Error(err); */
     }
   }
 
@@ -53,7 +53,7 @@ const redis = new Redis({
       return data ? JSON.parse(data) : null;
     } catch (err) {
       console.error("Errore durante il recupero dalla cache:", err);
-      throw new Error(err);
+      /* throw new Error(err); */
     }
   }
 
@@ -77,7 +77,7 @@ const redis = new Redis({
       await redis.sadd(`cache_keys:${userId}`, key); // Aggiungi la chiave al set dell'utente
     } catch (err) {
       console.error("Errore durante l'aggiunta alla cache:", err);
-      throw new Error(err);
+      /* throw new Error(err); */
     }
   }
 
