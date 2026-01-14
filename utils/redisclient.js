@@ -33,7 +33,7 @@ const redis = new Redis({
      /*  console.log(`Dato memorizzato nella cache con chiave: ${key}`); */
     } catch (err) {
       console.error("Errore durante il caching:", err);
-      throw new Error(err);
+      /* throw new Error(err); */
     }
   }
 
